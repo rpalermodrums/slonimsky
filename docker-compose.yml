@@ -1,0 +1,9 @@
+services:
+  slonimsky:
+    build: .
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - PYTHONUNBUFFERED=1 
