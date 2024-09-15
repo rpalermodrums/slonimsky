@@ -1,10 +1,14 @@
+import asyncio
+import concurrent.futures
 import itertools
 import time
+from collections import defaultdict
+from functools import lru_cache
+
 from mingus.core import scales, chords, progressions, intervals
 from mingus.core.notes import note_to_int, int_to_note
 from mingus.containers import NoteContainer, Note
 from mingus.midi import fluidsynth
-from collections import defaultdict
 
 # Constants
 OCTAVE = 12  # Number of semitones in an octave
@@ -62,6 +66,52 @@ class Scale:
 
     def __str__(self):
         return f"Scale: {self.name}, Intervals: {self.intervals_pattern}, Notes: {self.notes}"
+    
+
+class SlonimskyScale(Scale):
+    def __init__(self, name, intervals_pattern):
+        """
+        Initializes a Slonimsky Scale with a name and a pattern of intervals.
+        """
+        self.name = name
+        self.intervals_pattern = intervals_pattern
+        self.notes = []
+
+    def generate_notes(self, root_note):
+        """
+        Generates the notes of the Slonimsky scale starting from the root_note.
+        """
+        root_int = note_to_int(root_note)
+        current_int = root_int
+        self.notes = [int_to_note(current_int)]
+        for interval in self.intervals_pattern:
+            current_int += interval
+            self.notes.append(int_to_note(current_int % (OCTAVE * 2)))
+        # Remove the octave duplication
+        self.notes = self.notes[:-1]
+
+class ScaleGraph:
+    def __init__(self, intervals_pattern):
+        """
+        Initializes a graph representation of a scale.
+
+        :param intervals_pattern: List of intervals in semitones
+        """
+        self.graph = defaultdict(list)
+        self.intervals_pattern = intervals_pattern
+
+    def build_graph(self, root_note):
+        """
+        Builds a graph where each note is a node connected by intervals.
+
+        :param root_note: The starting note of the scale (e.g., 'C')
+        """
+        root_int = note_to_int(root_note)
+        current_int = root_int
+        for interval in self.intervals_pattern:
+            next_int = (current_int + interval) % OCTAVE
+            self.graph[current_int].append(next_int)
+            current_int = next_int
 
 class ScaleGenerator:
     def __init__(self):
@@ -147,49 +197,127 @@ class ScaleGenerator:
             scale_name = f"custom_{num_notes}_notes_{'_'.join(map(str, pattern))}"
             self.custom_scales.append(Scale(scale_name, list(pattern)))
 
+    def generate_barry_harris_scale(self, chord_type, root_note):
+        """
+        Generates Barry Harris's 6th diminished scale based on the chord type and root note.
+
+        :param chord_type: 'major' or 'minor'
+        :param root_note: The root note of the chord (e.g., 'C')
+        :return: Barry Harris Scale instance
+        """
+        if chord_type == 'major':
+            # Major 6th chord intervals
+            chord_intervals = [0, 4, 7, 9]  # C, E, G, A
+        elif chord_type == 'minor':
+            # Minor 6th chord intervals
+            chord_intervals = [0, 3, 7, 9]  # C, Eb, G, A
+        else:
+            raise ValueError("Chord type must be 'major' or 'minor'.")
+
+        # Leading-tone diminished chord intervals (starting on the maj7th)
+        diminished_intervals = [(i + 1) % OCTAVE for i in [0, 3, 6, 9]]  # For C major: B, D, F, Ab
+
+        # Combine the chord and diminished intervals into an 8-note scale
+        bh_intervals = sorted(set(chord_intervals + diminished_intervals))
+        bh_intervals_pattern = [(bh_intervals[i+1] - bh_intervals[i]) % OCTAVE for i in range(len(bh_intervals)-1)]
+        bh_intervals_pattern.append((OCTAVE - sum(bh_intervals_pattern)) % OCTAVE)  # Complete the octave
+
+        scale_name = f"Barry_Harris_{chord_type}_6th_diminished_{root_note}"
+        bh_scale = Scale(scale_name, bh_intervals_pattern)
+        bh_scale.generate_notes(root_note)
+        return bh_scale
+
+    @lru_cache(maxsize=None)
+    def generate_scale(self, intervals_pattern, root_note):
+        """
+        Generates and caches a scale based on the interval pattern and root note.
+
+        :param intervals_pattern: Tuple of intervals in semitones
+        :param root_note: The starting note of the scale (e.g., 'C')
+        :return: List of notes in the scale
+        """
+        root_int = note_to_int(root_note)
+        current_int = root_int
+        notes = [int_to_note(current_int)]
+        for interval in intervals_pattern:
+            current_int = (current_int + interval) % OCTAVE
+            notes.append(int_to_note(current_int))
+        # Remove the octave duplication
+        return notes[:-1]
+
     def catalog_scales(self, root_note='C'):
         """
-        Generates all scales, their rotations, and inversions, then catalogs them.
+        Generates all unique scales, their rotations, and inversions, then catalogs them.
 
         :param root_note: The root note for all scales
         """
         self.all_scales = []
+        unique_scales = set()
+
         # Process predefined scales
         for scale in self.predefined_scales:
+            pattern_tuple = tuple(scale.intervals_pattern)
+            if pattern_tuple in unique_scales:
+                continue
+            unique_scales.add(pattern_tuple)
             scale.generate_notes(root_note)
             self.all_scales.append(scale)
+
             # Generate rotations
             rotations = self.generate_all_rotations(scale)
             for rot in rotations:
+                pattern_tuple = tuple(rot.intervals_pattern)
+                if pattern_tuple in unique_scales:
+                    continue
+                unique_scales.add(pattern_tuple)
                 rot.generate_notes(root_note)
                 self.all_scales.append(rot)
+
             # Generate inversion
             inverted = self.generate_inversions(scale)
-            inverted.generate_notes(root_note)
-            self.all_scales.append(inverted)
-            # Optionally, generate rotations of inversions
-            inv_rotations = self.generate_all_rotations(inverted)
-            for inv_rot in inv_rotations:
-                inv_rot.generate_notes(root_note)
-                self.all_scales.append(inv_rot)
-        # Process custom scales if any
-        for scale in self.custom_scales:
+            pattern_tuple = tuple(inverted.intervals_pattern)
+            if pattern_tuple not in unique_scales:
+                unique_scales.add(pattern_tuple)
+                inverted.generate_notes(root_note)
+                self.all_scales.append(inverted)
+
+    def generate_all_scales_parallel(self, root_note='C'):
+        """
+        Generates all unique scales in parallel.
+
+        :param root_note: The root note for all scales
+        """
+        self.all_scales = []
+        unique_scales = set()
+        scales_to_process = self.predefined_scales + self.custom_scales
+
+        def process_scale(scale):
+            pattern_tuple = tuple(scale.intervals_pattern)
+            if pattern_tuple in unique_scales:
+                return None
+            unique_scales.add(pattern_tuple)
             scale.generate_notes(root_note)
-            self.all_scales.append(scale)
-            # Generate rotations
+            result_scales = [scale]
+
+            # Generate rotations and inversions
             rotations = self.generate_all_rotations(scale)
-            for rot in rotations:
-                rot.generate_notes(root_note)
-                self.all_scales.append(rot)
-            # Generate inversion
-            inverted = self.generate_inversions(scale)
-            inverted.generate_notes(root_note)
-            self.all_scales.append(inverted)
-            # Generate rotations of inversions
-            inv_rotations = self.generate_all_rotations(inverted)
-            for inv_rot in inv_rotations:
-                inv_rot.generate_notes(root_note)
-                self.all_scales.append(inv_rot)
+            inversions = [self.generate_inversions(scale)]
+            all_variants = rotations + inversions
+
+            for variant in all_variants:
+                pattern_tuple = tuple(variant.intervals_pattern)
+                if pattern_tuple not in unique_scales:
+                    unique_scales.add(pattern_tuple)
+                    variant.generate_notes(root_note)
+                    result_scales.append(variant)
+            return result_scales
+
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            futures = [executor.submit(process_scale, scale) for scale in scales_to_process]
+            for future in concurrent.futures.as_completed(futures):
+                result = future.result()
+                if result:
+                    self.all_scales.extend(result)
 
     def get_all_scales(self):
         return self.all_scales
@@ -247,20 +375,31 @@ class MelodicPatternGenerator:
         """
         Initializes the MelodicPatternGenerator.
         """
-        pass
+        self.pattern_cache = {}
 
     def generate_melodic_patterns(self, scale, pattern_length=4):
         """
-        Generates melodic patterns based on the scale.
+        Generates melodic patterns based on the scale using DP.
 
         :param scale: Scale instance
         :param pattern_length: Number of notes in each pattern
-        :return: List of melodic patterns, each pattern is a list of notes
+        :return: Generator of melodic patterns
         """
-        patterns = list(itertools.product(scale.get_notes(), repeat=pattern_length))
-        # To manage the number of patterns, limit to combinations without immediate repeats
-        filtered_patterns = [p for p in patterns if all(p[i] != p[i+1] for i in range(len(p)-1))]
-        return filtered_patterns
+        notes = scale.get_notes()
+        cache_key = (tuple(notes), pattern_length)
+        if cache_key in self.pattern_cache:
+            return self.pattern_cache[cache_key]
+
+        def helper(current_pattern):
+            if len(current_pattern) == pattern_length:
+                yield current_pattern
+                return
+            for note in notes:
+                if not current_pattern or note != current_pattern[-1]:
+                    yield from helper(current_pattern + [note])
+
+        self.pattern_cache[cache_key] = helper([])
+        return self.pattern_cache[cache_key]
 
 class Catalog:
     def __init__(self):
@@ -273,6 +412,10 @@ class Catalog:
 
     def add_scale(self, scale):
         self.scales.append(scale)
+        if isinstance(scale, SlonimskyScale):
+            print(f"Added Slonimsky scale: {scale.name}")
+        else:
+            print(f"Added scale: {scale.name}")
 
     def add_chord(self, chord_type, chord_notes):
         self.chords[chord_type].append(chord_notes)
@@ -323,10 +466,22 @@ def play_progression(progression_chords, bpm=120):
     for chord_notes in progression_chords:
         play_chord(chord_notes, duration=duration, bpm=bpm)
 
+async def play_melodic_pattern(pattern, bpm=120):
+    """
+    Plays a melodic pattern asynchronously using FluidSynth.
+    """
+    duration = 60 / bpm
+    for note in pattern:
+        n = Note(note)
+        n.velocity = 100
+        fluidsynth.play_NoteAsync(n, channel=1)
+        await asyncio.sleep(duration)
+        fluidsynth.stop_NoteAsync(n, channel=1)
+
 def main():
     # Initialize FluidSynth with your SoundFont file
     soundfont = './soundfonts/yamaha-c7-grand-piano.sf2'
-    fluidsynth.init(soundfont)
+    fluidsynth.init(soundfont, driver='pulseaudio')
     # Set the instrument (optional)
     fluidsynth.set_instrument(1, 1)  # 1 is the MIDI program number for Acoustic Grand Piano
 
@@ -337,7 +492,7 @@ def main():
     melodic_gen = MelodicPatternGenerator()
     catalog = Catalog()
 
-    # Step 1: Generate and catalog scales
+    # Step 1a: Generate and catalog scales
     root_note = 'C'
     scale_gen.generate_custom_scales(num_notes=7)  # Example: 7-note custom scales
     scale_gen.catalog_scales(root_note=root_note)
@@ -347,6 +502,22 @@ def main():
         # Play the scale
         print(f"Playing scale: {scale.name}")
         play_scale(scale)
+
+    # Step 1b: Generate and catalog all of Barry Harris's 6th diminished scales and Nicolas Slonimsky's 7 modes chromatically
+    for chord_type in ['major', 'minor']:
+        for root_note in ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']:
+            bh_scale = scale_gen.generate_barry_harris_scale(chord_type, root_note)
+            catalog.add_scale(bh_scale)
+            # Play the Barry Harris scale
+            print(f"Playing Barry Harris scale: {bh_scale.name}")
+            play_scale(bh_scale)
+
+            slonimsky_scale = SlonimskyScale(f"Slonimsky_{root_note}", [])
+            slonimsky_scale.generate_notes(root_note)
+            catalog.add_scale(slonimsky_scale)
+            # Play the Slonimsky scale
+            print(f"Playing Slonimsky scale: {slonimsky_scale.name}")
+            play_scale(slonimsky_scale)
 
     # Step 2: Build and catalog chords from scales
     # Example: For each scale, build triads on each scale degree
@@ -377,7 +548,7 @@ def main():
         first_scale = all_scales[0]
         melodic_patterns = melodic_gen.generate_melodic_patterns(first_scale, pattern_length=4)
         # To prevent explosion, limit to first 10 patterns
-        for pattern in melodic_patterns[:10]:
+        for pattern in itertools.islice(melodic_patterns, 10):
             print(f"Melodic Pattern: {pattern}")
             # Play the melodic pattern
             for note in pattern:
