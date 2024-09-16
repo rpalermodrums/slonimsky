@@ -3,7 +3,10 @@ services:
     build: .
     ports:
       - "5000:5000"
-    volumes:
-      - ./data:/app/data
     environment:
-      - PYTHONUNBUFFERED=1 
+      - PULSE_SERVER=host.docker.internal
+    network_mode: "host"
+    volumes:
+      - /run/user/$(id -u)/pulse:/run/user/$(id -u)/pulse
+      - /dev/snd:/dev/snd
+      - ./data:/app/data

@@ -10,6 +10,10 @@ from mingus.core.notes import note_to_int, int_to_note
 from mingus.containers import NoteContainer, Note
 from mingus.midi import fluidsynth
 
+fluidsynth.init('./soundfonts/yamaha-c7-grand-piano.sf2', 'coreaudio')
+
+fluidsynth.set_instrument(1, 1)  # 1 is the MIDI program number for Acoustic Grand Piano
+
 # Constants
 OCTAVE = 12  # Number of semitones in an octave
 
@@ -479,12 +483,6 @@ async def play_melodic_pattern(pattern, bpm=120):
         fluidsynth.stop_NoteAsync(n, channel=1)
 
 def main():
-    # Initialize FluidSynth with your SoundFont file
-    soundfont = './soundfonts/yamaha-c7-grand-piano.sf2'
-    fluidsynth.init(soundfont, driver='pulseaudio')
-    # Set the instrument (optional)
-    fluidsynth.set_instrument(1, 1)  # 1 is the MIDI program number for Acoustic Grand Piano
-
     # Initialize components
     scale_gen = ScaleGenerator()
     chord_builder = ChordBuilder()
