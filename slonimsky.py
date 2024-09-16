@@ -1,7 +1,9 @@
 import asyncio
+import argparse
 import concurrent.futures
 import itertools
 import time
+import json
 from collections import defaultdict
 from functools import lru_cache
 
@@ -11,7 +13,6 @@ from mingus.containers import NoteContainer, Note
 from mingus.midi import fluidsynth
 
 fluidsynth.init('./soundfonts/yamaha-c7-grand-piano.sf2', 'coreaudio')
-
 fluidsynth.set_instrument(1, 1)  # 1 is the MIDI program number for Acoustic Grand Piano
 
 # Constants
@@ -95,27 +96,33 @@ class SlonimskyScale(Scale):
         self.notes = self.notes[:-1]
 
 class ScaleGraph:
-    def __init__(self, intervals_pattern):
+    def __init__(self, scale):
         """
         Initializes a graph representation of a scale.
 
-        :param intervals_pattern: List of intervals in semitones
+        :param scale: Scale instance
         """
         self.graph = defaultdict(list)
-        self.intervals_pattern = intervals_pattern
+        self.scale = scale
 
-    def build_graph(self, root_note):
+    def build_graph(self):
         """
-        Builds a graph where each note is a node connected by intervals.
+        Builds a graph where each note is a node connected to possible next notes based on the scale.
+        """
+        notes = self.scale.get_notes()
+        num_notes = len(notes)
+        for i in range(num_notes):
+            current_note = notes[i]
+            next_note = notes[(i + 1) % num_notes]
+            self.graph[current_note].append(next_note)
 
-        :param root_note: The starting note of the scale (e.g., 'C')
+    def get_graph(self):
         """
-        root_int = note_to_int(root_note)
-        current_int = root_int
-        for interval in self.intervals_pattern:
-            next_int = (current_int + interval) % OCTAVE
-            self.graph[current_int].append(next_int)
-            current_int = next_int
+        Returns the graph representation.
+
+        :return: Dictionary representing the adjacency list of the graph
+        """
+        return self.graph
 
 class ScaleGenerator:
     def __init__(self):
@@ -177,11 +184,12 @@ class ScaleGenerator:
         """
         return scale.invert()
 
-    def generate_custom_scales(self, num_notes, constraints=None):
+    def generate_custom_scales(self, num_notes, root_note='C', constraints=None):
         """
         Generates custom scales based on the number of notes and optional constraints.
 
         :param num_notes: Number of notes in the scale
+        :param root_note: The starting note of the scale (default 'C')
         :param constraints: Function to filter scale interval patterns
         """
         # Generate all possible interval combinations that sum to OCTAVE
@@ -199,7 +207,9 @@ class ScaleGenerator:
             if constraints and not constraints(pattern):
                 continue
             scale_name = f"custom_{num_notes}_notes_{'_'.join(map(str, pattern))}"
-            self.custom_scales.append(Scale(scale_name, list(pattern)))
+            custom_scale = Scale(scale_name, list(pattern))
+            custom_scale.generate_notes(root_note)
+            self.custom_scales.append(custom_scale)
 
     def generate_barry_harris_scale(self, chord_type, root_note):
         """
@@ -372,7 +382,7 @@ class ChordBuilder:
         """
         Builds a chord based on the chord type and root note.
 
-        :param chord_type: Type of the chord (e.g., 'major')
+        :param chord_type: Type of the chord (e.g., 'major', 'minor', 'diminished')
         :param root_note: Root note of the chord (e.g., 'C')
         :return: List of notes in the chord
         """
@@ -577,30 +587,40 @@ class Catalog:
 def play_scale(scale, bpm=120):
     """
     Plays the notes of a scale using FluidSynth.
+
+    :param scale: Scale instance
+    :param bpm: Beats per minute (default 120)
     """
     notes = scale.get_notes()
     duration = 60 / bpm  # Duration of a quarter note in seconds
     for note in notes:
         n = Note(note)
         n.velocity = 100
-        fluidsynth.play_Note(n, channel=1)
+        fluidsynth.play_NoteAsync(n, channel=1)
         time.sleep(duration)
-        fluidsynth.stop_Note(n, channel=1)
+        fluidsynth.stop_NoteAsync(n, channel=1)
 
 def play_chord(chord_notes, duration=2, bpm=120):
     """
     Plays a chord (list of notes) using FluidSynth.
+
+    :param chord_notes: List of note names
+    :param duration: Duration in beats for each chord (default 2)
+    :param bpm: Beats per minute (default 120)
     """
     nc = NoteContainer(chord_notes)
     fluidsynth.play_NoteContainer(nc, channel=1)
     time.sleep(duration * (60 / bpm))
     fluidsynth.stop_NoteContainer(nc, channel=1)
 
-def play_progression(progression_chords, bpm=120):
+def play_progression(progression_chords, duration=2, bpm=120):
     """
     Plays a chord progression using FluidSynth.
+
+    :param progression_chords: List of chords (each chord is a list of note names)
+    :param duration: Duration in beats for each chord (default 2)
+    :param bpm: Beats per minute (default 120)
     """
-    duration = 2  # Duration in beats for each chord
     for chord_notes in progression_chords:
         play_chord(chord_notes, duration=duration, bpm=bpm)
 
@@ -616,7 +636,39 @@ async def play_melodic_pattern(pattern, bpm=120):
         await asyncio.sleep(duration)
         fluidsynth.stop_NoteAsync(n, channel=1)
 
-def main():
+def determine_chord_type(scale, degree):
+    """
+    Determines the chord type for a given scale degree.
+
+    :param scale: Scale instance
+    :param degree: Scale degree (0-based index)
+    :return: Chord type as a string
+    """
+    # Simplified example based on major scale chord qualities
+    # In major scale: I, ii, iii, IV, V, vi, vii°
+    chord_qualities = ['major', 'minor', 'minor', 'major', 'major', 'minor', 'diminished']
+    num_degrees = len(scale.get_notes())
+    return chord_qualities[degree % num_degrees]
+
+def validate_root_note(root_note):
+    valid_notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+    if root_note not in valid_notes:
+        raise ValueError(f"Invalid root note '{root_note}'. Valid notes are: {', '.join(valid_notes)}")
+
+def validate_bpm(bpm):
+    if bpm <= 30 or bpm > 300:
+        raise ValueError(f"BPM '{bpm}' is out of valid range (30-300).")
+
+def validate_interval(interval):
+    if interval <= 0 or interval >= 24:
+        raise ValueError(f"Interval '{interval}' is out of valid range (1-23).")
+
+def validate_iterations(iterations):
+    if iterations <= 0 or iterations > 100:
+        raise ValueError(f"Iterations '{iterations}' is out of valid range (1-100).")
+
+def main(root_note='C', bpm=120, progression_pattern=None, pattern_start_note='C',
+         interval=7, iterations=12, num_custom_scales=7, num_notes_in_custom_scales=7):
     # Initialize components
     scale_gen = ScaleGenerator()
     chord_builder = ChordBuilder()
@@ -624,58 +676,127 @@ def main():
     melodic_gen = MelodicPatternGenerator()
     catalog = Catalog()
 
-    # Step 1a: Generate and catalog scales
-    root_note = 'C'
-    scale_gen.generate_custom_scales(num_notes=7)  # Example: 7-note custom scales
+    parser = argparse.ArgumentParser(description='Musical Pattern Generator')
+    parser.add_argument('--root_note', type=str, help='Root note for scales and chords')
+    parser.add_argument('--bpm', type=int, help='Tempo in beats per minute')
+    parser.add_argument('--progression_pattern', nargs='+', help='Chord progression pattern')
+    parser.add_argument('--pattern_start_note', type=str, help='Start note for patterns')
+    parser.add_argument('--interval', type=int, help='Interval in semitones for patterns')
+    parser.add_argument('--iterations', type=int, help='Number of iterations for patterns')
+    parser.add_argument('--num_custom_scales', type=int, help='Number of custom scales to generate')
+    parser.add_argument('--num_notes_in_custom_scales', type=int, help='Number of notes in custom scales')
+
+    args = parser.parse_args()
+
+    # Prompt for missing required arguments
+    if not args.root_note:
+        args.root_note = input('Enter root note (e.g., C, D#, F): ').strip()
+    if not args.bpm:
+        args.bpm = int(input('Enter BPM (e.g., 120): ').strip())
+    if not args.progression_pattern:
+        progression_input = input('Enter progression pattern (e.g., I IV V): ').strip()
+        args.progression_pattern = progression_input.split()
+    if not args.pattern_start_note:
+        args.pattern_start_note = input('Enter start note for patterns: ').strip()
+    if not args.interval:
+        args.interval = int(input('Enter interval in semitones: ').strip())
+    if not args.iterations:
+        args.iterations = int(input('Enter number of iterations for patterns: ').strip())
+    if not args.num_custom_scales:
+        args.num_custom_scales = int(input('Enter number of custom scales to generate: ').strip())
+    if not args.num_notes_in_custom_scales:
+        args.num_notes_in_custom_scales = int(input('Enter number of notes in custom scales: ').strip())
+
+    try:
+        # Validate inputs
+        validate_root_note(root_note)
+        validate_bpm(bpm)
+        validate_interval(interval)
+        validate_iterations(iterations)
+    except ValueError as e:
+        print(f"Error: {e}")
+        sys.exit(1)
+
+    # Generate and catalog scales
+    scale_gen.generate_custom_scales(num_notes=num_notes_in_custom_scales, root_note=root_note)
     scale_gen.catalog_scales(root_note=root_note)
     all_scales = scale_gen.get_all_scales()
     for scale in all_scales:
         catalog.add_scale(scale)
+        # Build graph for the scale
+        scale_graph = ScaleGraph(scale)
+        scale_graph.build_graph()
+        graph_output = scale_graph.get_graph()
+        print(f"Graph for scale {scale.name}:")
+        print(graph_output)
+        # Export graph to JSON
+        with open(f'./data/graphs/{scale.name}_graph.json', 'w') as graph_file:
+            json.dump(graph_output, graph_file)
         # Play the scale
         print(f"Playing scale: {scale.name}")
-        play_scale(scale)
+        play_scale(scale, bpm=bpm)
 
-    # Step 1b: Generate and catalog all of Barry Harris's 6th diminished scales and Nicolas Slonimsky's 7 modes chromatically
+    # Generate and catalog all of Barry Harris's 6th diminished scales and Nicolas Slonimsky's 7 modes chromatically
     for chord_type in ['major', 'minor']:
         for root_note in ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']:
             bh_scale = scale_gen.generate_barry_harris_scale(chord_type, root_note)
             catalog.add_scale(bh_scale)
+            # Build graph for the Barry Harris scale
+            bh_scale_graph = ScaleGraph(bh_scale)
+            bh_scale_graph.build_graph()
+            bh_graph_output = bh_scale_graph.get_graph()
+            print(f"Graph for Barry Harris scale {bh_scale.name}:")
+            print(bh_graph_output)
+            # Export graph to JSON
+            with open(f'./data/graphs/{bh_scale.name}_graph.json', 'w') as graph_file:
+                json.dump(bh_graph_output, graph_file)
             # Play the Barry Harris scale
             print(f"Playing Barry Harris scale: {bh_scale.name}")
-            play_scale(bh_scale)
+            play_scale(bh_scale, bpm=bpm)
 
             slonimsky_scale = SlonimskyScale(f"Slonimsky_{root_note}", [])
             slonimsky_scale.generate_notes(root_note)
             catalog.add_scale(slonimsky_scale)
+            # Build graph for the Slonimsky scale
+            slonimsky_scale_graph = ScaleGraph(slonimsky_scale)
+            slonimsky_scale_graph.build_graph()
+            slonimsky_graph_output = slonimsky_scale_graph.get_graph()
+            print(f"Graph for Slonimsky scale {slonimsky_scale.name}:")
+            print(slonimsky_graph_output)
+            # Export graph to JSON
+            with open(f'./data/graphs/{slonimsky_scale.name}_graph.json', 'w') as graph_file:
+                json.dump(slonimsky_graph_output, graph_file)
             # Play the Slonimsky scale
             print(f"Playing Slonimsky scale: {slonimsky_scale.name}")
-            play_scale(slonimsky_scale)
+            play_scale(slonimsky_scale, bpm=bpm)
 
-    # Step 2: Build and catalog chords from scales
-    # Example: For each scale, build triads on each scale degree
+    # Build and catalog chords from scales
     for scale in all_scales:
-        for degree in range(len(scale.get_notes())):
-            # Determine the root note for the chord based on the scale degree
-            chord_root = scale.get_notes()[degree]
-            # For simplicity, use major triads
-            chord_type = 'major'  # Placeholder, ideally determined by scale
-            chord_notes = chord_builder.build_chord(chord_type, chord_root)
+        scale_notes = scale.get_notes()
+        for degree, note in enumerate(scale_notes):
+            # Determine chord type based on the scale
+            chord_type = determine_chord_type(scale, degree)
+            chord_notes = chord_builder.build_chord(chord_type, note)
             catalog.add_chord(chord_type, chord_notes)
             # Play the chord
-            print(f"Playing chord: {chord_notes}")
-            play_chord(chord_notes)
+            print(f"Playing {chord_type} chord: {chord_notes}")
+            play_chord(chord_notes, bpm=bpm)
+        
+        # Export graph to JSON
+        graph_output = scale_graph.get_graph()
+        with open(f'./data/graphs/{scale.name}_graph.json', 'w') as graph_file:
+            json.dump(graph_output, graph_file)
 
-    # Step 3: Create and catalog chord progressions
-    # Example: I-IV-V progression in C major
-    progression_pattern = ['I', 'IV', 'V']
-    progression = progression_builder.build_progression(progression_pattern, 'C')
+    # Create and catalog chord progressions
+    if progression_pattern is None:
+        progression_pattern = ['I', 'IV', 'V']  # Default progression
+    progression = progression_builder.build_progression(progression_pattern, root_note)
     catalog.add_progression(progression)
     # Play the progression
     print("Playing progression:")
-    play_progression(progression)
+    play_progression(progression, bpm=bpm)
 
-    # Step 4: Generate and catalog melodic patterns
-    # Example: Generate patterns from the first scale
+    # Generate and catalog melodic patterns
     if all_scales:
         first_scale = all_scales[0]
         melodic_patterns = melodic_gen.generate_melodic_patterns(first_scale, pattern_length=4)
@@ -692,56 +813,62 @@ def main():
 
     # **Enhancement: Using Cyclic Interval Patterns**
     print("\n=== Cyclic Interval Patterns ===")
-    start_note = 'C'
-    interval = 7  # Perfect fifth interval
-    iterations = 12
-    cyclic_pattern = melodic_gen.generate_cyclic_interval_pattern(start_note, interval, iterations)
-    print(f"Cyclic Interval Pattern starting at {start_note} with interval {interval}:")
+    cyclic_pattern = melodic_gen.generate_cyclic_interval_pattern(pattern_start_note, interval, iterations)
+    print(f"Cyclic Interval Pattern starting at {pattern_start_note} with interval {interval}:")
     print(cyclic_pattern)
+
+    # Build graph for the pattern
+    pattern_graph = defaultdict(list)
+    for i in range(len(cyclic_pattern) - 1):
+        current_note = cyclic_pattern[i]
+        next_note = cyclic_pattern[i + 1]
+        pattern_graph[current_note].append(next_note)
+    print(f"Graph for cyclic pattern:")
+    print(pattern_graph)
+    # Export pattern graph
+    with open('./data/graphs/cyclic_pattern_graph.json', 'w') as graph_file:
+        json.dump(pattern_graph, graph_file)
 
     # Play the cyclic interval pattern
     for note in cyclic_pattern:
         n = Note(note)
         n.velocity = 100
         fluidsynth.play_NoteAsync(n, channel=1)
-        time.sleep(0.5)
+        time.sleep(60 / bpm)
         fluidsynth.stop_NoteAsync(n, channel=1)
 
     # **Enhancement: Building Principal Interval Progression**
     print("\n=== Principal Interval Progression ===")
-    progression = progression_builder.build_principal_interval_progression(start_note, interval)
-    print(f"Principal Interval Progression starting at {start_note} with interval {interval}:")
+    progression = progression_builder.build_principal_interval_progression(pattern_start_note, interval)
+    print(f"Principal Interval Progression starting at {pattern_start_note} with interval {interval}:")
     print(progression)
 
     # Play chords in the progression
     for root in progression:
         chord_notes = chord_builder.build_chord('major', root)
         print(f"Playing chord: {chord_notes}")
-        play_chord(chord_notes)
+        play_chord(chord_notes, bpm=bpm)
 
     # **Enhancement: Generating Whole Tone Scale**
     print("\n=== Whole Tone Scale ===")
-    whole_tone_scale = scale_gen.generate_whole_tone_scale(start_note)
+    whole_tone_scale = scale_gen.generate_whole_tone_scale(pattern_start_note)
     catalog.add_scale(whole_tone_scale)
-    print(f"Whole Tone Scale starting at {start_note}:")
+    print(f"Whole Tone Scale starting at {pattern_start_note}:")
     print(whole_tone_scale.get_notes())
-    play_scale(whole_tone_scale)
+    play_scale(whole_tone_scale, bpm=bpm)
 
     # **Enhancement: Generating Augmented Scale**
     print("\n=== Augmented Scale ===")
-    augmented_scale = scale_gen.generate_augmented_scale(start_note)
+    augmented_scale = scale_gen.generate_augmented_scale(pattern_start_note)
     catalog.add_scale(augmented_scale)
-    print(f"Augmented Scale starting at {start_note}:")
+    print(f"Augmented Scale starting at {pattern_start_note}:")
     print(augmented_scale.get_notes())
-    play_scale(augmented_scale)
+    play_scale(augmented_scale, bpm=bpm)
 
     # **Other enhancements can be similarly integrated**
 
-    # Step 5: Display the catalog
+    # Display the catalog
     catalog.display_catalog()
-
-if __name__ == "__main__":
-    main()
 
 if __name__ == "__main__":
     # Create a file to store the output
@@ -758,3 +885,4 @@ if __name__ == "__main__":
         sys.stdout = original_stdout
 
     print("Output has been saved to './data/output.txt'")
+

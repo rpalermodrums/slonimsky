@@ -1,2 +1,1 @@
-Added scale: major
-Playing scale: major
+Enter root note (e.g., C, D#, F): 
