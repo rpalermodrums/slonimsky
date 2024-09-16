@@ -32,7 +32,7 @@ pip install --upgrade pip
 pip install -r requirements.txt
 
 # Install python-rtmidi
-pip install --only-binary=:all: python-rtmidi==1.5.3
+pip install --only-binary=:all: python-rtmidi
 
 # Run the GUI application
 python gui.py
