@@ -7,3 +7,30 @@ venv
 virtualenv
 .env
 docker-compose.override.yml
+
+# Python
+__pycache__/
+*.py[cod]
+*.so
+
+# Virtual environment
+venv/
+env/
+*.env
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Docker
+.dockerignore
+
+# Data
+data/graphs/
