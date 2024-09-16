@@ -1,7 +1,6 @@
 import asyncio
 import argparse
 import concurrent.futures
-import itertools
 import sys
 import os
 import time
@@ -9,7 +8,7 @@ import json
 from collections import defaultdict
 from functools import lru_cache
 
-from mingus.core import scales, chords, progressions, intervals
+from mingus.core import scales, chords, progressions, intervals, notes
 from mingus.core.notes import note_to_int, int_to_note
 from mingus.containers import NoteContainer, Note
 from mingus.midi import fluidsynth
@@ -471,7 +470,7 @@ class MelodicPatternGenerator:
         start_int = note_to_int(start_note)
         pattern = []
         for i in range(iterations):
-            pitch = (start_int + i * interval) % (OCTAVE * 2)  # Considering two octaves
+            pitch = (start_int + i * interval) % OCTAVE  # Use modulo OCTAVE to keep within 0-11 range
             pattern.append(int_to_note(pitch))
         return pattern
 
@@ -647,9 +646,15 @@ def determine_chord_type(scale, degree):
     return chord_qualities[degree % num_degrees]
 
 def validate_root_note(root_note):
-    valid_notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
-    if root_note not in valid_notes:
-        raise ValueError(f"Invalid root note '{root_note}'. Valid notes are: {', '.join(valid_notes)}")
+    try:
+        # Convert the input note to an integer (0-11)
+        note_int = notes.note_to_int(root_note)
+
+        # Convert back to a note name (this will use the preferred sharp notation)
+        valid_notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+        return valid_notes[note_int]
+    except notes.NoteFormatError:
+        raise ValueError(f"Invalid root note '{root_note}'. Please enter a valid note (e.g., C, C#, Db, D, etc.)")
 
 def validate_bpm(bpm):
     if bpm <= 30 or bpm > 300:
@@ -793,12 +798,13 @@ def execute_main(args):
         json.dump(pattern_graph, graph_file)
 
     # Play the cyclic interval pattern
+    print("Playing cyclic interval pattern:")
     for note in cyclic_pattern:
         n = Note(note)
         n.velocity = 100
-        fluidsynth.play_NoteAsync(n, channel=1)
+        fluidsynth.play_Note(n, channel=1)
         time.sleep(60 / args.bpm)
-        fluidsynth.stop_NoteAsync(n, channel=1)
+        fluidsynth.stop_Note(n, channel=1)
 
     # Additional code for other patterns and features...
 
@@ -807,4 +813,5 @@ def execute_main(args):
 
 if __name__ == "__main__":
     main()
+
 
