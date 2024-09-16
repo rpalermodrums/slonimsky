@@ -1,1 +1,7 @@
 soundfonts
+data
+myenv
+venv
+virtualenv
+.env
+docker-compose.override.yml

@@ -326,6 +326,32 @@ class ScaleGenerator:
     def get_all_scales(self):
         return self.all_scales
 
+    def generate_whole_tone_scale(self, start_note):
+        """
+        Generates a whole tone scale starting from the given note.
+
+        :param start_note: The starting note (e.g., 'C')
+        :return: Scale instance of the whole tone scale
+        """
+        intervals_pattern = [2] * 6  # Six whole steps cover the octave
+        scale_name = f"Whole_Tone_Scale_{start_note}"
+        whole_tone_scale = Scale(scale_name, intervals_pattern)
+        whole_tone_scale.generate_notes(start_note)
+        return whole_tone_scale
+
+    def generate_augmented_scale(self, start_note):
+        """
+        Generates an augmented scale starting from the given note.
+
+        :param start_note: The starting note (e.g., 'C')
+        :return: Scale instance of the augmented scale
+        """
+        intervals = [3, 1, 3, 1, 3, 1]  # Alternating minor thirds and half steps
+        scale_name = f"Augmented_Scale_{start_note}"
+        augmented_scale = Scale(scale_name, intervals)
+        augmented_scale.generate_notes(start_note)
+        return augmented_scale
+
 class ChordBuilder:
     def __init__(self):
         """
@@ -374,6 +400,25 @@ class ProgressionBuilder:
         chord_names = progressions.to_chords(progression_pattern, key)
         return chord_names
 
+    def build_principal_interval_progression(self, start_note, interval):
+        """
+        Builds a progression where chords are a fixed interval apart.
+
+        :param start_note: The starting note (e.g., 'C')
+        :param interval: Interval between chords in semitones
+        :return: List of chord root notes
+        """
+        start_int = note_to_int(start_note)
+        progression = []
+        current_int = start_int
+        while True:
+            note = int_to_note(current_int % OCTAVE)
+            progression.append(note)
+            current_int = (current_int + interval) % OCTAVE
+            if current_int == start_int:
+                break
+        return progression
+
 class MelodicPatternGenerator:
     def __init__(self):
         """
@@ -404,6 +449,95 @@ class MelodicPatternGenerator:
 
         self.pattern_cache[cache_key] = helper([])
         return self.pattern_cache[cache_key]
+
+    def generate_cyclic_interval_pattern(self, start_note, interval, iterations):
+        """
+        Generates a cyclic interval pattern starting from a note.
+
+        :param start_note: The starting note (e.g., 'C')
+        :param interval: Interval in semitones
+        :param iterations: Number of iterations
+        :return: List of notes in the pattern
+        """
+        start_int = note_to_int(start_note)
+        pattern = []
+        for i in range(iterations):
+            pitch = (start_int + i * interval) % (OCTAVE * 2)  # Considering two octaves
+            pattern.append(int_to_note(pitch))
+        return pattern
+
+    def transpose_pattern(self, pattern, shift):
+        """
+        Transposes a given pattern by a specified number of semitones.
+
+        :param pattern: List of note names (e.g., ['C', 'E', 'G'])
+        :param shift: Number of semitones to shift
+        :return: Transposed pattern as a list of notes
+        """
+        transposed = []
+        for note in pattern:
+            transposed_pitch = (note_to_int(note) + shift) % (OCTAVE * 2)
+            transposed.append(int_to_note(transposed_pitch))
+        return transposed
+
+    def get_partial_cycle(self, cycle, length):
+        """
+        Retrieves a partial cycle from a full cycle pattern.
+
+        :param cycle: List of note names representing the full cycle
+        :param length: Desired length of the partial cycle
+        :return: List of note names representing the partial cycle
+        """
+        if length > len(cycle):
+            return cycle
+        return cycle[:length]
+
+    def extend_pattern_across_octaves(self, pattern, octaves):
+        """
+        Extends a pattern across multiple octaves.
+
+        :param pattern: List of note names
+        :param octaves: Number of octaves to span
+        :return: Extended pattern as a list of notes
+        """
+        extended = []
+        for octave in range(octaves):
+            for note in pattern:
+                pitch_int = note_to_int(note) + (OCTAVE * octave)
+                extended.append(int_to_note(pitch_int))
+        return extended
+
+    def combine_cycles(self, cycles):
+        """
+        Combines multiple cycles into one sequence.
+
+        :param cycles: List of cycles, each a list of note names
+        :return: Combined cycle as a list of notes
+        """
+        combined = []
+        for cycle in cycles:
+            combined.extend(cycle)
+        return combined
+
+    def generate_major_thirds_cycle_vocabulary(self, start_note):
+        """
+        Generates a melodic vocabulary based on a cycle of major thirds.
+
+        :param start_note: The starting note (e.g., 'C')
+        :return: List of tuples containing note and associated chord type
+        """
+        vocabulary = []
+        # V7 chords cycling by major thirds
+        for i in range(3):
+            pitch = (note_to_int(start_note) + i * 4) % OCTAVE
+            note = int_to_note(pitch)
+            vocabulary.append((note, 'V7'))
+        # I chords cycling by major thirds
+        for i in range(3):
+            pitch = (note_to_int(start_note) + i * 4) % OCTAVE
+            note = int_to_note(pitch)
+            vocabulary.append((note, 'I'))
+        return vocabulary
 
 class Catalog:
     def __init__(self):
@@ -556,8 +690,58 @@ def main():
                 time.sleep(0.5)  # Adjust the duration as needed
                 fluidsynth.stop_Note(n, channel=1)
 
+    # **Enhancement: Using Cyclic Interval Patterns**
+    print("\n=== Cyclic Interval Patterns ===")
+    start_note = 'C'
+    interval = 7  # Perfect fifth interval
+    iterations = 12
+    cyclic_pattern = melodic_gen.generate_cyclic_interval_pattern(start_note, interval, iterations)
+    print(f"Cyclic Interval Pattern starting at {start_note} with interval {interval}:")
+    print(cyclic_pattern)
+
+    # Play the cyclic interval pattern
+    for note in cyclic_pattern:
+        n = Note(note)
+        n.velocity = 100
+        fluidsynth.play_NoteAsync(n, channel=1)
+        time.sleep(0.5)
+        fluidsynth.stop_NoteAsync(n, channel=1)
+
+    # **Enhancement: Building Principal Interval Progression**
+    print("\n=== Principal Interval Progression ===")
+    progression = progression_builder.build_principal_interval_progression(start_note, interval)
+    print(f"Principal Interval Progression starting at {start_note} with interval {interval}:")
+    print(progression)
+
+    # Play chords in the progression
+    for root in progression:
+        chord_notes = chord_builder.build_chord('major', root)
+        print(f"Playing chord: {chord_notes}")
+        play_chord(chord_notes)
+
+    # **Enhancement: Generating Whole Tone Scale**
+    print("\n=== Whole Tone Scale ===")
+    whole_tone_scale = scale_gen.generate_whole_tone_scale(start_note)
+    catalog.add_scale(whole_tone_scale)
+    print(f"Whole Tone Scale starting at {start_note}:")
+    print(whole_tone_scale.get_notes())
+    play_scale(whole_tone_scale)
+
+    # **Enhancement: Generating Augmented Scale**
+    print("\n=== Augmented Scale ===")
+    augmented_scale = scale_gen.generate_augmented_scale(start_note)
+    catalog.add_scale(augmented_scale)
+    print(f"Augmented Scale starting at {start_note}:")
+    print(augmented_scale.get_notes())
+    play_scale(augmented_scale)
+
+    # **Other enhancements can be similarly integrated**
+
     # Step 5: Display the catalog
     catalog.display_catalog()
+
+if __name__ == "__main__":
+    main()
 
 if __name__ == "__main__":
     # Create a file to store the output
