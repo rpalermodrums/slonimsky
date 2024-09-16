@@ -5,8 +5,11 @@ import sys
 import os
 import time
 import json
+import random
 from collections import defaultdict
 from functools import lru_cache
+
+import matplotlib.pyplot as plt
 
 from mingus.core import scales, chords, progressions, intervals, notes
 from mingus.core.notes import note_to_int, int_to_note
@@ -91,7 +94,7 @@ class SlonimskyScale(Scale):
             current_int += interval
             self.notes.append(int_to_note(current_int % (OCTAVE * 2)))
         # Remove the octave duplication
-        self.notes = self.notes[:-1]
+            self.notes = self.notes[:-1]
 
 class ScaleGraph:
     def __init__(self, scale):
@@ -100,27 +103,153 @@ class ScaleGraph:
 
         :param scale: Scale instance
         """
-        self.graph = defaultdict(list)
+        self.graph = defaultdict(lambda: defaultdict(float))
         self.scale = scale
+        self.node_types = {'note', 'chord', 'scale'}
 
     def build_graph(self):
         """
-        Builds a graph where each note is a node connected to possible next notes based on the scale.
+        Builds a weighted graph representing musical ideas and their continuations.
         """
         notes = self.scale.get_notes()
         num_notes = len(notes)
+
+        # Add note connections
         for i in range(num_notes):
             current_note = notes[i]
-            next_note = notes[(i + 1) % num_notes]
-            self.graph[current_note].append(next_note)
+            for j in range(num_notes):
+                next_note = notes[j]
+                weight = 1.0 if j == (i + 1) % num_notes else 0.5
+                self.graph[('note', current_note)][('note', next_note)] = weight
+
+        # Add chord connections (example with triads)
+        for i in range(num_notes):
+            root = notes[i]
+            third = notes[(i + 2) % num_notes]
+            fifth = notes[(i + 4) % num_notes]
+            chord = (root, third, fifth)
+            self.graph[('chord', chord)][('note', root)] = 1.0
+            self.graph[('chord', chord)][('note', third)] = 0.8
+            self.graph[('chord', chord)][('note', fifth)] = 0.9
+
+        # Add scale connection
+        scale_tuple = tuple(notes)
+        for note in notes:
+            self.graph[('scale', scale_tuple)][('note', note)] = 1.0
 
     def get_graph(self):
         """
         Returns the graph representation.
 
-        :return: Dictionary representing the adjacency list of the graph
+        :return: Dictionary representing the weighted adjacency list of the graph
         """
         return self.graph
+
+    def export_to_json(self, filename):
+        """
+        Exports the graph to a JSON file.
+
+        :param filename: Name of the JSON file to create
+        """
+        json_graph = {str(k): {str(inner_k): v for inner_k, v in inner_dict.items()}
+                      for k, inner_dict in self.graph.items()}
+        with open(filename, 'w') as f:
+            json.dump(json_graph, f, indent=2)
+
+    @classmethod
+    def import_from_json(cls, filename):
+        """
+        Imports a graph from a JSON file.
+
+        :param filename: Name of the JSON file to read
+        :return: ScaleGraph instance
+        """
+        with open(filename, 'r') as f:
+            json_graph = json.load(f)
+
+        graph = cls(None)  # Create an instance without a scale
+        graph.graph = defaultdict(lambda: defaultdict(float))
+        for k, inner_dict in json_graph.items():
+            node_type, node_value = eval(k)
+            for inner_k, v in inner_dict.items():
+                inner_node_type, inner_node_value = eval(inner_k)
+                graph.graph[(node_type, node_value)][(inner_node_type, inner_node_value)] = v
+
+        return graph
+
+    def generate_notes(self, start_note, length):
+        """
+        Generates a sequence of notes based on the graph.
+
+        :param start_note: Starting note
+        :param length: Number of notes to generate
+        :return: List of generated notes
+        """
+        current = ('note', start_note)
+        generated = [start_note]
+        for _ in range(length - 1):
+            options = self.graph[current]
+            if not options:
+                break
+            next_node = max(options, key=options.get)
+            if next_node[0] == 'note':
+                generated.append(next_node[1])
+                current = next_node
+            else:
+                # If next node is not a note, choose a random note from it
+                note_options = [k for k in self.graph[next_node] if k[0] == 'note']
+                if note_options:
+                    next_note = random.choice(note_options)
+                    generated.append(next_note[1])
+                    current = next_note
+        return generated
+
+    def generate_chords(self, start_chord, length):
+        """
+        Generates a sequence of chords based on the graph.
+
+        :param start_chord: Starting chord
+        :param length: Number of chords to generate
+        :return: List of generated chords
+        """
+        current = ('chord', start_chord)
+        generated = [start_chord]
+        for _ in range(length - 1):
+            options = self.graph[current]
+            if not options:
+                break
+            next_node = max(options, key=options.get)
+            if next_node[0] == 'chord':
+                generated.append(next_node[1])
+                current = next_node
+            else:
+                # If next node is not a chord, choose a random chord from the graph
+                chord_options = [k for k in self.graph if k[0] == 'chord']
+                if chord_options:
+                    next_chord = random.choice(chord_options)
+                    generated.append(next_chord[1])
+                    current = next_chord
+        return generated
+
+    def generate_progression(self, start_scale, length):
+        """
+        Generates a progression based on the graph.
+
+        :param start_scale: Starting scale
+        :param length: Number of elements in the progression
+        :return: List of generated scales, chords, and notes
+        """
+        current = ('scale', start_scale)
+        generated = [start_scale]
+        for _ in range(length - 1):
+            options = self.graph[current]
+            if not options:
+                break
+            next_node = max(options, key=options.get)
+            generated.append(next_node[1])
+            current = next_node
+        return generated
+
 
 class ScaleGenerator:
     def __init__(self):
@@ -141,15 +270,21 @@ class ScaleGenerator:
         mingus_scales = {
             'major': scales.Major,
             'natural_minor': scales.NaturalMinor,
+            'harmonic_minor': scales.HarmonicMinor,
+            'melodic_minor': scales.MelodicMinor,
+            'chromatic': scales.Chromatic,
+            'whole_tone': scales.WholeTone,
+            'octatonic': scales.Octatonic,
+            'ionian': scales.Ionian,
             'dorian': scales.Dorian,
             'phrygian': scales.Phrygian,
             'lydian': scales.Lydian,
             'mixolydian': scales.Mixolydian,
+            'aeolian': scales.Aeolian,
             'locrian': scales.Locrian,
-            'harmonic_minor': scales.HarmonicMinor,
-            'melodic_minor': scales.MelodicMinor,
-            'chromatic': scales.Chromatic
-            # Add more Mingus scales as needed
+            'bachian': scales.Bachian,
+            'minor_neapolitan': scales.MinorNeapolitan,
+            'harmonic_major': scales.HarmonicMajor,
         }
         for name, scale_cls in mingus_scales.items():
             scale = scale_cls('C')  # Mingus scales are initialized with a key, not a note
@@ -373,7 +508,29 @@ class ChordBuilder:
             'dominant_seventh': chords.dominant_seventh,
             'major_seventh': chords.major_seventh,
             'minor_seventh': chords.minor_seventh,
-            # Add more chord types as needed
+            'diminished_seventh': chords.diminished_seventh,
+            'half_diminished_seventh': chords.half_diminished_seventh,
+            'minor_major_seventh': chords.minor_major_seventh,
+            'augmented_major_seventh': chords.augmented_major_seventh,
+            'augmented_minor_seventh': chords.augmented_minor_seventh,
+            'dominant_flat_five': chords.dominant_flat_five,
+            'suspended_second': chords.suspended_second_triad,
+            'suspended_fourth': chords.suspended_fourth_triad,
+            'suspended_seventh': chords.suspended_seventh,
+            'suspended_fourth_ninth': chords.suspended_fourth_ninth,
+            'major_sixth': chords.major_sixth,
+            'minor_sixth': chords.minor_sixth,
+            'dominant_sixth': chords.dominant_sixth,
+            'major_ninth': chords.major_ninth,
+            'dominant_ninth': chords.dominant_ninth,
+            'minor_ninth': chords.minor_ninth,
+            'dominant_flat_ninth': chords.dominant_flat_ninth,
+            'dominant_sharp_ninth': chords.dominant_sharp_ninth,
+            'minor_eleventh': chords.minor_eleventh,
+            'dominant_thirteenth': chords.dominant_thirteenth,
+            'major_thirteenth': chords.major_thirteenth,
+            'minor_thirteenth': chords.minor_thirteenth,
+            'hendrix_chord': chords.hendrix_chord,
         }
 
     def build_chord(self, chord_type, root_note):
@@ -636,6 +793,16 @@ async def play_melodic_pattern(pattern, bpm=120):
         await asyncio.sleep(duration)
         fluidsynth.stop_NoteAsync(n, channel=1)
 
+def visualize_pattern(pattern, filename):
+    fig, ax = plt.subplots(figsize=(10, 2))
+    ax.set_yticks([])
+    for i, duration in enumerate(pattern):
+        ax.add_patch(plt.Rectangle((i, 0), duration, 1, fill=True))
+    ax.set_xlim(0, sum(pattern))
+    ax.set_ylim(0, 1)
+    plt.savefig(filename)
+    plt.close()
+
 def determine_chord_type(scale, degree):
     """
     Determines the chord type for a given scale degree.
@@ -812,7 +979,78 @@ def execute_main(args):
         time.sleep(60 / args.bpm)
         fluidsynth.stop_Note(n, channel=1)
 
-    # Additional code for other patterns and features...
+    # Generate and play arpeggio patterns
+    print("\n=== Arpeggio Patterns ===")
+    arpeggio_pattern = melodic_gen.generate_arpeggio_pattern(args.arpeggio_pattern_type, args.root_note, args.iterations)
+    print(f"Arpeggio Pattern ({args.arpeggio_pattern_type}) starting at {args.root_note}:")
+    print(arpeggio_pattern)
+
+    # Build graph for the arpeggio pattern
+    arpeggio_graph = defaultdict(list)
+    for i in range(len(arpeggio_pattern) - 1):
+        current_note = arpeggio_pattern[i]
+        next_note = arpeggio_pattern[i + 1]
+        arpeggio_graph[current_note].append(next_note)
+    print(f"Graph for arpeggio pattern:")
+    print(arpeggio_graph)
+    # Optionally save the arpeggio pattern graph
+    with open('./data/graphs/arpeggio_pattern_graph.json', 'w') as graph_file:
+        json.dump(arpeggio_graph, graph_file)
+
+    # Play the arpeggio pattern
+    print("Playing arpeggio pattern:")
+    for note in arpeggio_pattern:
+        n = Note(note)
+        n.velocity = 100
+        fluidsynth.play_Note(n, channel=1)
+        time.sleep(60 / args.bpm)
+        fluidsynth.stop_Note(n, channel=1)
+
+    # Export patterns to MIDI files
+    print("Exporting patterns to MIDI files...")
+    export_to_midi(cyclic_pattern, './data/midi/cyclic_pattern.mid', bpm=args.bpm)
+    export_to_midi(arpeggio_pattern, './data/midi/arpeggio_pattern.mid', bpm=args.bpm)
+    print("MIDI export completed.")
+
+    # Generate and play random melodic patterns
+    print("\n=== Random Melodic Patterns ===")
+    random_pattern = melodic_gen.generate_random_melodic_pattern(args.root_note, args.pattern_length, args.iterations)
+    print(f"Random Melodic Pattern starting at {args.root_note}:")
+    print(random_pattern)
+
+    # Build graph for the random melodic pattern
+    random_graph = defaultdict(list)
+    for i in range(len(random_pattern) - 1):
+        current_note = random_pattern[i]
+        next_note = random_pattern[i + 1]
+        random_graph[current_note].append(next_note)
+    print(f"Graph for random melodic pattern:")
+    print(random_graph)
+    # Optionally save the random melodic pattern graph
+    with open('./data/graphs/random_melodic_pattern_graph.json', 'w') as graph_file:
+        json.dump(random_graph, graph_file)
+
+    # Play the random melodic pattern
+    print("Playing random melodic pattern:")
+    for note in random_pattern:
+        n = Note(note)
+        n.velocity = 100
+        fluidsynth.play_Note(n, channel=1)
+        time.sleep(60 / args.bpm)
+        fluidsynth.stop_Note(n, channel=1)
+
+    # Generate and visualize rhythmic patterns
+    print("\n=== Rhythmic Patterns ===")
+    rhythmic_pattern = rhythmic_gen.generate_rhythmic_pattern(args.rhythm_type, args.pattern_length)
+    print(f"Rhythmic Pattern ({args.rhythm_type}):")
+    print(rhythmic_pattern)
+
+    # Save rhythmic pattern visualization
+    visualize_pattern(rhythmic_pattern, './data/visualizations/rhythmic_pattern.png')
+    print("Rhythmic pattern visualization saved.")
+
+    # Additional features such as GUI updates or further pattern integrations can be added here.
+
 
     # Display the catalog
     catalog.display_catalog()
