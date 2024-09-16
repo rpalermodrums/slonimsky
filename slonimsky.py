@@ -585,12 +585,17 @@ class Catalog:
 def initialize_fluidsynth():
     try:
         print("Initializing FluidSynth...")
-        fluidsynth.init('./soundfonts/yamaha-c7-grand-piano.sf2', 'coreaudio')
-        fluidsynth.set_instrument(1, 1)  # 1 is the MIDI program number for Acoustic Grand Piano
+        soundfont_path = './soundfonts/yamaha-c7-grand-piano.sf2'
+        if not os.path.exists(soundfont_path):
+            print(f"Error: Soundfont file not found at {soundfont_path}")
+            return False
+        fluidsynth.init(soundfont_path, 'coreaudio')
+        fluidsynth.set_instrument(1, 1)
         print("FluidSynth initialized successfully.")
+        return True
     except Exception as e:
-        print(f"Error initializing FluidSynth: {e}")
-        sys.exit(1)
+        print(f"Error initializing FluidSynth: {str(e)}")
+        return False
 
 def test_sound():
     try:
@@ -734,7 +739,8 @@ def main():
         sys.exit(1)
 
     # Initialize FluidSynth after user input
-    initialize_fluidsynth()
+    if not initialize_fluidsynth():
+        print("FluidSynth initialization failed. Audio playback will be disabled.")
 
     # Test sound
     test_sound()
