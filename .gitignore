@@ -1,4 +1,6 @@
 soundfonts
+__pycache__
+
 data
 myenv
 venv
