@@ -35,7 +35,7 @@ pip install -r requirements.txt
 pip install --only-binary=:all: python-rtmidi
 
 # Run the GUI application
-python gui.py
+python ./src/gui.py
 
 # Deactivate the virtual environment if we activated it
 if [ -z "$VIRTUAL_ENV" ]; then
