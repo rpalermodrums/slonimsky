@@ -1,29 +1,33 @@
-# src/graph/chord_graph.py
 from .base_graph import BaseGraph
-from typing import List
+from typing import List, Dict
 from models import ChordEvent
+from mingus.core import chords, keys, progressions, intervals, notes
 
 class ChordGraphBuilder(BaseGraph):
-    # Define Modal Interchange mappings
-    MODAL_INTERCHANGE = {
-        'Cmaj7': ['Cmin7', 'C7'],
-        'G7': ['Gm7', 'Gmaj7'],
-        # Add more mappings as needed
-    }
+    def __init__(self, key: str = 'C'):
+        super().__init__()
+        self.key = key.upper()
+        self.tonic = self.key + 'maj7'
+        self.scale = keys.get_notes(self.key, 'major')
+        self.functional_roles = self._generate_functional_roles()
+        self.circle_of_fifths = self._generate_circle_of_fifths()
+        self.modal_interchange = self._generate_modal_interchange()
+        self.barry_harris_scales = self._generate_barry_harris_scales()
+        self.harmonic_matrices = self._generate_harmonic_matrices()
 
-    def build_chord_graph(self, chords: List[ChordEvent], scale_graph: BaseGraph):
+    def build_chord_graph(self, chords: List[ChordEvent]):
         for chord in chords:
-            functional_role = self._assign_functional_role(chord.symbol)
+            functional_role = self.functional_roles.get(chord.symbol, 'unknown')
             self.add_node(
                 chord.symbol,
                 type=chord.type,
                 functional_role=functional_role,
                 degrees=chord.degrees
             )
-        
-        # Define Harmony Transitions based on Functional Harmony and Circle of Fifths
+
+        # Define harmony transitions based on Circle of Fifths
         for chord in chords:
-            possible_transitions = self._get_circle_of_fifths_transitions(chord.symbol)
+            possible_transitions = self.circle_of_fifths.get(chord.symbol, [])
             for next_chord in possible_transitions:
                 if next_chord in [c.symbol for c in chords]:
                     weight = self._determine_weight(next_chord)
@@ -33,10 +37,10 @@ class ChordGraphBuilder(BaseGraph):
                         resolution=True,
                         weight=weight
                     )
-        
+
         # Handle Modal Interchange Transitions
         for chord in chords:
-            interchange_chords = self.MODAL_INTERCHANGE.get(chord.symbol, [])
+            interchange_chords = self.modal_interchange.get(chord.symbol, [])
             for interm_chord in interchange_chords:
                 if interm_chord in [c.symbol for c in chords]:
                     self.add_edge(
@@ -45,7 +49,31 @@ class ChordGraphBuilder(BaseGraph):
                         modal_interchange=True,
                         weight=7
                     )
-        
+
+        # Handle Barry Harris Harmony Transitions
+        for chord in chords:
+            bh_transitions = self.barry_harris_scales.get(chord.symbol, [])
+            for bh_chord in bh_transitions:
+                if bh_chord in [c.symbol for c in chords]:
+                    self.add_edge(
+                        chord.symbol,
+                        bh_chord,
+                        barry_harris=True,
+                        weight=9
+                    )
+
+        # Handle Harmonic Matrices (Ralph Bowen)
+        for chord in chords:
+            matrix_chords = self.harmonic_matrices.get(chord.symbol, [])
+            for matrix_chord in matrix_chords:
+                if matrix_chord in [c.symbol for c in chords]:
+                    self.add_edge(
+                        chord.symbol,
+                        matrix_chord,
+                        harmonic_matrix=True,
+                        weight=8
+                    )
+
         # Handle Chord Inversions
         for chord in chords:
             if '/' in chord.symbol:
@@ -54,63 +82,116 @@ class ChordGraphBuilder(BaseGraph):
                     bass,
                     chord.symbol,
                     inversion=True,
-                    weight=9
+                    weight=10
                 )
 
-    def _assign_functional_role(self, chord_symbol: str) -> str:
+    def _generate_functional_roles(self) -> Dict[str, str]:
         """
-        Assigns a functional role to a chord based on its symbol.
+        Generate functional roles for diatonic chords based on the current key.
         """
-        functional_roles = {
-            'Cmaj7': 'tonic',
-            'G7': 'dominant',
-            'D7': 'secondary_dominant',
-            'A7': 'secondary_dominant',
-            'E7': 'secondary_dominant',
-            'B7': 'secondary_dominant',
-            'Fmaj7': 'subdominant',
-            'Bbmaj7': 'subdominant',
-            'Ebmaj7': 'subdominant',
-            'Abmaj7': 'subdominant',
-            'Dbmaj7': 'subdominant',
-            'Gbmaj7': 'subdominant',
-            'Cbmaj7': 'subdominant',
-            'Fbmaj7': 'subdominant',
-        }
-        return functional_roles.get(chord_symbol, 'unknown')
+        roles = {}
+        diatonic_chords = keys.get_chords(self.key, 'major')
+        roman_numerals = ['I', 'ii', 'iii', 'IV', 'V', 'vi', 'vii°']
+        for i, chord_notes in enumerate(diatonic_chords):
+            numeral = roman_numerals[i]
+            chord_name = chords.determine(chord_notes)
+            if chord_name:
+                chord_symbol = chord_name[0]
+                if numeral == 'I':
+                    role = 'tonic'
+                elif numeral == 'V':
+                    role = 'dominant'
+                elif numeral == 'IV':
+                    role = 'subdominant'
+                else:
+                    role = 'pre-dominant'
+                roles[chord_symbol] = role
+        return roles
 
-    def _get_circle_of_fifths_transitions(self, chord_symbol: str) -> List[str]:
+    def _generate_circle_of_fifths(self) -> Dict[str, List[str]]:
         """
-        Returns a list of chord symbols that are a fifth away from the given chord.
+        Generate the Circle of Fifths transitions based on the current key.
         """
-        circle_of_fifths = {
-            'Cmaj7': ['G7', 'Fmaj7'],
-            'G7': ['Cmaj7', 'D7'],
-            'D7': ['G7', 'A7'],
-            'A7': ['D7', 'E7'],
-            'E7': ['A7', 'B7'],
-            'B7': ['E7', 'Cmaj7'],
-            'Fmaj7': ['Bbmaj7', 'Cmaj7'],
-            'Bbmaj7': ['Ebmaj7', 'Fmaj7'],
-            'Ebmaj7': ['Abmaj7', 'Bbmaj7'],
-            'Abmaj7': ['Dbmaj7', 'Ebmaj7'],
-            'Dbmaj7': ['Gbmaj7', 'Abmaj7'],
-            'Gbmaj7': ['Cbmaj7', 'Dbmaj7'],
-            'Cbmaj7': ['Fbmaj7', 'Gbmaj7'],
-            'Fbmaj7': ['Bbmaj7', 'Cbmaj7'],
-        }
-        return circle_of_fifths.get(chord_symbol, [])
+        circle = {}
+        all_chords = chords.major_triad_shorthand.keys()
+        for chord_symbol in all_chords:
+            # Find the chord a perfect fifth above and below
+            fifth_above = notes.int_to_note(
+                (notes.note_to_int(chord_symbol) + 7) % 12
+            ) + 'maj7'
+            fifth_below = notes.int_to_note(
+                (notes.note_to_int(chord_symbol) + 5) % 12
+            ) + 'maj7'
+            circle[chord_symbol] = [fifth_above, fifth_below]
+        return circle
+
+    def _generate_modal_interchange(self) -> Dict[str, List[str]]:
+        """
+        Generate modal interchange chords based on parallel modes.
+        """
+        interchange = {}
+        mode_names = ['dorian', 'phrygian', 'lydian', 'mixolydian', 'aeolian', 'locrian']
+        for mode in mode_names:
+            modal_scale = keys.get_notes(self.key, mode)
+            modal_chords = chords.triads(modal_scale)
+            for chord_notes in modal_chords:
+                chord_name = chords.determine(chord_notes)
+                if chord_name:
+                    chord_symbol = chord_name[0]
+                    interchange.setdefault(chord_symbol, []).append(chord_symbol)
+        return interchange
+
+    def _generate_barry_harris_scales(self) -> Dict[str, List[str]]:
+        """
+        Generate chords based on Barry Harris's harmonic concepts.
+        """
+        bh_scales = {}
+        bh_scale_notes = self._barry_harris_scale()
+        bh_chords = []
+        for i in range(len(bh_scale_notes) - 2):
+            chord_notes = [bh_scale_notes[i], bh_scale_notes[i+1], bh_scale_notes[i+2]]
+            bh_chords.append(chord_notes)
+        for chord_notes in bh_chords:
+            chord_name = chords.determine(chord_notes)
+            if chord_name:
+                chord_symbol = chord_name[0]
+                bh_scales.setdefault(chord_symbol, []).append(chord_symbol)
+        return bh_scales
+
+    def _barry_harris_scale(self) -> List[str]:
+        """
+        Generate the Barry Harris 6th diminished scale for the current key.
+        """
+        major_scale = keys.get_notes(self.key, 'major')
+        diminished_note = notes.int_to_note(
+            (notes.note_to_int(major_scale[5]) + 1) % 12
+        )
+        bh_scale = major_scale[:5] + [diminished_note] + major_scale[5:]
+        return bh_scale
+
+    def _generate_harmonic_matrices(self) -> Dict[str, List[str]]:
+        """
+        Generate chords based on Ralph Bowen's harmonic matrices.
+        """
+        matrices = {}
+        # Implementing tritone substitutions as an example
+        for chord_symbol in self.functional_roles.keys():
+            root_note = chord_symbol[:-3]  # Removing chord type (e.g., 'maj', 'min')
+            tritone_note = intervals.get_tone_from_semitones(root_note, 6)
+            tritone_chord = tritone_note + chord_symbol[-3:]
+            matrices.setdefault(chord_symbol, []).append(tritone_chord)
+        return matrices
 
     def _determine_weight(self, next_chord: str) -> int:
         """
-        Determines the weight of the transition based on the functional role of the next chord.
+        Determine the weight of transitioning to the next chord based on its functional role.
         """
-        functional_roles = {
+        role_weights = {
             'tonic': 15,
             'dominant': 12,
-            'secondary_dominant': 12,
             'subdominant': 10,
-            'unknown': 8
+            'pre-dominant': 8,
+            'unknown': 5
         }
-        role = self._assign_functional_role(next_chord)
-        return functional_roles.get(role, 8)
+        role = self.functional_roles.get(next_chord, 'unknown')
+        return role_weights.get(role, 5)

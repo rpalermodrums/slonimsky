@@ -1,4 +1,3 @@
-# src/graph/integrated_music_graph.py
 import networkx as nx
 from .scale_graph import ScaleGraphBuilder
 from .chord_graph import ChordGraphBuilder

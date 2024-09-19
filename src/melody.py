@@ -1,16 +1,65 @@
 import random
-from typing import List
-
 import networkx as nx
+from typing import List
+from models import NoteEvent
 
 class MelodyGenerator:
-    def __init__(self, graph: nx.DiGraph):
-        """
-        Initializes the MelodyGenerator with a given NetworkX graph.
+    def __init__(self, integrated_graph: nx.MultiDiGraph):
+        self.graph = integrated_graph
 
-        :param graph: Directed graph representing musical transitions.
+    def generate_melody(self, start_note: str, length: int) -> List[str]:
         """
-        self.graph = graph
+        Generates a melody using a weighted random walk through the graph.
+
+        :param start_note: Starting note for the melody.
+        :param length: Desired length of the melody.
+        :return: List of note names representing the melody.
+        """
+        melody = [start_note]
+        current_note = start_note
+
+        for _ in range(length - 1):
+            successors = list(self.graph.successors(current_note))
+            if not successors:
+                break
+            next_note = self._select_next_note(current_note, successors)
+            melody.append(next_note)
+            current_note = next_note
+
+        return melody
+
+    def _select_next_note(self, current_note: str, successors: List[str]) -> str:
+        """
+        Selects the next note based on weighted probabilities.
+
+        :param current_note: Current note in the melody.
+        :param successors: Possible next notes.
+        :return: Selected next note.
+        """
+        edges = self.graph.get_edge_data(current_note, None)
+        if not edges:
+            return current_note  # No transition available
+
+        weights = []
+        notes = []
+        for to_node in successors:
+            # Consider multiple edges (layers)
+            edge_weights = [attr.get('weight', 1) for _, _, attr in self.graph.edges(current_note, to_node, data=True)]
+            total_weight = sum(edge_weights)
+            weights.append(total_weight)
+            notes.append(to_node)
+        
+        # Weighted random selection
+        total = sum(weights)
+        if total == 0:
+            return current_note  # Avoid division by zero
+        r = random.uniform(0, total)
+        upto = 0
+        for note, weight in zip(notes, weights):
+            if upto + weight >= r:
+                return note
+            upto += weight
+        return notes[-1]
 
     def generate_melody_dijkstra(self) -> List[str]:
         """
@@ -18,14 +67,8 @@ class MelodyGenerator:
 
         :return: List of note names representing the melody.
         """
-        times = sorted(set(node[1] for node in self.graph.nodes))
-        start_time = times[0]
-        end_time = times[-1]
-        start_nodes = [node for node in self.graph.nodes if node[1] == start_time]
-        end_nodes = [node for node in self.graph.nodes if node[1] == end_time]
-
-        if not start_nodes or not end_nodes:
-            raise ValueError("Graph does not contain valid start or end nodes for melody generation.")
+        start_nodes = [node for node, attr in self.graph.nodes(data=True) if attr.get('functional_role') == 'tonic']
+        end_nodes = [node for node, attr in self.graph.nodes(data=True) if attr.get('functional_role') == 'tonic']
 
         best_melody = []
         best_weight = float('-inf')
@@ -38,17 +81,17 @@ class MelodyGenerator:
                         self.graph,
                         start_node,
                         end_node,
-                        weight=lambda u, v, d: -d['weight']
+                        weight=lambda u, v, d: -d.get('weight', 1)
                     )
-                    path_weight = sum(self.graph[path[i]][path[i+1]]['weight'] for i in range(len(path)-1))
+                    path_weight = sum(d.get('weight', 1) for u, v, d in zip(path, path[1:], path[:-1]))
                     if path_weight > best_weight:
                         best_weight = path_weight
-                        best_melody = [node[0] for node in path]
+                        best_melody = path
                 except nx.NetworkXNoPath:
                     continue
 
         if not best_melody:
-            raise RuntimeError("Failed to generate a melody. No valid paths found.")
+            raise ValueError("No valid melody path found.")
 
         return best_melody
 
@@ -75,8 +118,13 @@ class MelodyGenerator:
                 break
             weights = [self.graph[current_node][succ]['weight'] for succ in successors]
             total = sum(weights)
-            probabilities = [w / total for w in weights]
-            current_node = random.choices(successors, weights=probabilities, k=1)[0]
-            melody.append(current_node[0])
+            if total == 0:
+                next_note = current_node[0]
+            else:
+                probabilities = [w / total for w in weights]
+                next_note = random.choices(successors, weights=probabilities, k=1)[0]
+            melody.append(next_note)
+            current_node = next_note
 
         return melody
+    

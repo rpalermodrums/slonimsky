@@ -1,4 +1,3 @@
-# src/graph/motif_graph.py
 from .base_graph import BaseGraph
 from typing import List
 from models import Motif

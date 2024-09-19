@@ -1,7 +1,5 @@
-from collections import defaultdict
 from typing import List
 from scales import Scale
-
 
 class Catalog:
     def __init__(self):

@@ -1,36 +1,16 @@
-import random
-from typing import List, Type
-
-from mingus.core.scales import (
-    Aeolian,
-    Bachian,
-    Chromatic,
-    Dorian,
-    HarmonicMajor,
-    HarmonicMinor,
-    Ionian,
-    Locrian,
-    Lydian,
-    Major,
-    MelodicMinor,
-    MinorNeapolitan,
-    Mixolydian,
-    NaturalMinor,
-    Octatonic,
-    Phrygian,
-    WholeTone,
-)
-from mingus.core import chords, intervals, notes
+from typing import List, Optional
+from mingus.core import scales as mingus_scales, intervals
+from mingus.core import notes
 
 class Scale:
-    def __init__(self, name: str, mingus_scale_cls=None, root_note: str = 'C', notes: List[str] = None):
+    def __init__(self, name: str, mingus_scale_cls = None, root_note: str = 'C', notes: Optional[List[str]] = None):
         """
         Initializes a Scale with a name, Mingus scale class, and root note.
 
         :param name: Name of the scale
         :param mingus_scale_cls: Mingus Scale subclass (e.g., scales.Major)
         :param root_note: Root note of the scale
-        :param notes: Optional list of notes (overrides mingus_scale)
+        :param notes: Optional list of notes (overrides Mingus scale)
         """
         self.name = name
         self.root_note = root_note
@@ -96,7 +76,7 @@ class Scale:
         ascending_notes = self.notes  # Use the current notes
         intervals_list = []
         for i in range(1, len(ascending_notes)):
-            interval = intervals.measure(ascending_notes[i - 1], ascending_notes[i]) % 12
+            interval = intervals.measure(ascending_notes[i - 1], ascending_notes[i])
             intervals_list.append(interval)
 
         # Invert intervals: each interval becomes its complement to 12
@@ -106,6 +86,13 @@ class Scale:
     def __str__(self) -> str:
         return f"Scale: {self.name}, Notes: {self.notes}"
 
+    def get_primary_notes(self) -> List[str]:
+        """
+        Retrieves the primary notes of the scale, typically within a specific octave.
+
+        :return: List of primary note names.
+        """
+        return self.notes
 
 class ScaleGenerator:
     def __init__(self):
@@ -113,29 +100,29 @@ class ScaleGenerator:
         Initializes the ScaleGenerator with a list of available Mingus scale classes.
         """
         self.available_scale_classes = [
-            Aeolian,
-            Bachian,
-            Chromatic,
-            Dorian,
-            HarmonicMajor,
-            HarmonicMinor,
-            Ionian,
-            Locrian,
-            Lydian,
-            Major,
-            MelodicMinor,
-            MinorNeapolitan,
-            Mixolydian,
-            NaturalMinor,
-            Octatonic,
-            Phrygian,
-            WholeTone
+            mingus_scales.Aeolian,
+            mingus_scales.Bachian,
+            mingus_scales.Chromatic,
+            mingus_scales.Dorian,
+            mingus_scales.HarmonicMajor,
+            mingus_scales.HarmonicMinor,
+            mingus_scales.Ionian,
+            mingus_scales.Locrian,
+            mingus_scales.Lydian,
+            mingus_scales.Major,
+            mingus_scales.MelodicMinor,
+            mingus_scales.MinorNeapolitan,
+            mingus_scales.Mixolydian,
+            mingus_scales.NaturalMinor,
+            mingus_scales.Octatonic,
+            mingus_scales.Phrygian,
+            mingus_scales.WholeTone
         ]
         self.scales: List[Scale] = []
 
     def generate_custom_scales(self, root_note: str) -> None:
         """
-        Generates scales based on the specified number of notes and root note.
+        Generates scales based on the specified root note.
 
         :param root_note: Root note for the scales.
         """
@@ -171,143 +158,12 @@ class ScaleGenerator:
         :return: List of Scale instances.
         """
         return self.scales
-
-
-class ChordBuilder:
-    def __init__(self):
+    
+    def generate_scale(self, root_note: str) -> None:
         """
-        Initializes the ChordBuilder with necessary configurations.
+        Generates and catalogs scales for a given root note.
+
+        :param root_note: The root note for which to generate scales.
         """
-        pass  # Implement chord building logic as needed
-
-    def build_chord(self, chord_symbol: str, root_note: str) -> List[str]:
-        """
-        Builds a chord based on the chord symbol and root note.
-
-        :param chord_symbol: Chord symbol (e.g., 'm7', 'maj7')
-        :param root_note: Root note of the chord
-        :return: List of note names constituting the chord
-        """
-        # Example implementation using Mingus
-        try:
-            chord_notes = chords.from_shorthand(chord_symbol)
-            return chord_notes
-        except Exception as e:
-            print(f"Error building chord {chord_symbol}: {e}")
-            return []
-
-
-class ProgressionBuilder:
-    def __init__(self):
-        """
-        Initializes the ProgressionBuilder with necessary configurations.
-        """
-        pass  # Implement progression building logic as needed
-
-    def build_progression(self, progression_pattern: List[str], root_note: str) -> List[List[str]]:
-        """
-        Builds a chord progression based on the provided pattern and root note.
-
-        :param progression_pattern: List of chord symbols (e.g., ['I', 'IV', 'V'])
-        :param root_note: Root note for the progression
-        :return: List of chords, each represented as a list of note names
-        """
-        progression = []
-        for chord_symbol in progression_pattern:
-            actual_chord = self.translate_roman_numeral(chord_symbol, root_note)
-            chord_notes = self.build_chord(actual_chord, root_note)
-            progression.append(chord_notes)
-        return progression
-
-    def build_chord(self, chord_symbol: str, root_note: str) -> List[str]:
-        """
-        Builds a chord based on the chord symbol and root note.
-
-        :param chord_symbol: Chord symbol (e.g., 'm7', 'maj7', 'C', 'F')
-        :param root_note: Root note of the chord
-        :return: List of note names constituting the chord
-        """
-        # Reuse ChordBuilder
-        chord_builder = ChordBuilder()
-        return chord_builder.build_chord(chord_symbol, root_note)
-
-    def translate_roman_numeral(self, numeral: str, root_note: str) -> str:
-        """
-        Translates a Roman numeral chord symbol to an actual chord symbol based on the key.
-
-        :param numeral: Roman numeral representing the chord (e.g., 'I', 'iv', 'V')
-        :param root_note: Root note of the key
-        :return: Translated chord symbol (e.g., 'C', 'Fm', 'G')
-        """
-        roman_numerals = {
-            'I': 'maj',
-            'II': 'dim',
-            'III': 'm',
-            'IV': 'maj',
-            'V': 'maj',
-            'VI': 'm',
-            'VII': 'dim'
-        }
-
-        numeral = numeral.upper()
-        is_minor = numeral.islower()
-        numeral_key = numeral.upper()
-
-        if numeral_key not in roman_numerals:
-            print(f"Error: Unsupported Roman numeral '{numeral}'.")
-            return numeral  # Return as-is; build_chord will handle invalid symbols
-
-        chord_type = roman_numerals[numeral_key]
-
-        # Determine the scale to use (major key assumed)
-        scale = Major(root_note).ascending()
-
-        # Map Roman numeral to scale degree
-        degree_map = {
-            'I': 0,
-            'II': 1,
-            'III': 2,
-            'IV': 3,
-            'V': 4,
-            'VI': 5,
-            'VII': 6
-        }
-
-        root_index = degree_map.get(numeral_key, 0)
-        chord_root = scale[root_index]
-
-        # Determine chord quality
-        if chord_type == 'maj':
-            chord_symbol = chord_root
-        elif chord_type == 'm':
-            chord_symbol = f"{chord_root}m"
-        elif chord_type == 'dim':
-            chord_symbol = f"{chord_root}dim"
-        else:
-            chord_symbol = chord_root  # Default to major if unknown
-
-        return chord_symbol
-
-
-class MelodicPatternGenerator:
-    def __init__(self):
-        """
-        Initializes the MelodicPatternGenerator with necessary configurations.
-        """
-        pass  # Implement melodic pattern generation logic as needed
-
-    def generate_pattern(self, scale: Scale) -> List[str]:
-        """
-        Generates a melodic pattern based on the provided scale.
-
-        :param scale: Scale instance
-        :return: List of note names representing the melodic pattern
-        """
-        # Example implementation: random walk within the scale
-        pattern = []
-        current_index = random.randint(0, len(scale.notes) - 1)
-        for _ in range(8):  # Generate 8 notes
-            pattern.append(scale.notes[current_index])
-            step = random.choice([-1, 0, 1])  # Move up, stay, or move down
-            current_index = max(0, min(current_index + step, len(scale.notes) - 1))
-        return pattern
+        self.generate_custom_scales(root_note)
+        self.catalog_scales(root_note)
