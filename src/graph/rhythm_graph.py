@@ -2,6 +2,9 @@ from .base_graph import BaseGraph
 from typing import List, Dict
 from models import RhythmicPattern
 import itertools
+import logging
+
+logger = logging.getLogger(__name__)
 
 class RhythmGraphBuilder(BaseGraph):
     def __init__(self, tempo: int = 120):
@@ -10,11 +13,14 @@ class RhythmGraphBuilder(BaseGraph):
         self.rhythm_systems = self._generate_rhythm_systems()
         self.groupings = self._generate_groupings()
         self.meter = self._set_default_meter()
+        logger.info(f"Initialized RhythmGraphBuilder with tempo: {self.tempo}, meter: {self.meter}")
 
     def build_rhythm_graph(self, rhythms: List[RhythmicPattern]):
+        logger.info(f"Building rhythm graph with {len(rhythms)} rhythms.")
         for rhythm in rhythms:
             # Assume rhythm.pattern is a list of durations
             pattern_str = self._pattern_to_str(rhythm.pattern)
+            logger.debug(f"Adding node: {pattern_str} with tempo: {rhythm.tempo or self.tempo}, accent: {rhythm.accent}")
             self.add_node(
                 pattern_str,
                 tempo=rhythm.tempo or self.tempo,
@@ -24,6 +30,7 @@ class RhythmGraphBuilder(BaseGraph):
             )
         
         # Define rhythmic transitions based on rhythmic transformations
+        logger.info("Defining rhythmic transitions.")
         for current_rhythm in rhythms:
             for next_rhythm in rhythms:
                 if current_rhythm == next_rhythm:
@@ -31,6 +38,7 @@ class RhythmGraphBuilder(BaseGraph):
                 transformations = self._generate_rhythmic_transformations(current_rhythm.pattern)
                 if self._pattern_to_str(next_rhythm.pattern) in transformations:
                     weight = self._determine_rhythm_weight(current_rhythm, next_rhythm)
+                    logger.debug(f"Adding edge from {self._pattern_to_str(current_rhythm.pattern)} to {self._pattern_to_str(next_rhythm.pattern)} with transformation: True, weight: {weight}")
                     self.add_edge(
                         self._pattern_to_str(current_rhythm.pattern),
                         self._pattern_to_str(next_rhythm.pattern),
@@ -39,6 +47,7 @@ class RhythmGraphBuilder(BaseGraph):
                     )
                 else:
                     # Less preferred transitions
+                    logger.debug(f"Adding edge from {self._pattern_to_str(current_rhythm.pattern)} to {self._pattern_to_str(next_rhythm.pattern)} with transformation: False, weight: 5")
                     self.add_edge(
                         self._pattern_to_str(current_rhythm.pattern),
                         self._pattern_to_str(next_rhythm.pattern),
@@ -62,6 +71,7 @@ class RhythmGraphBuilder(BaseGraph):
                 'periodicities': (p1, p2),
                 'resultant': resultant
             }
+            logger.debug(f"Generated rhythm system: {pattern_str} with periodicities: {p1}, {p2}")
         
         return rhythm_systems
 
@@ -75,6 +85,7 @@ class RhythmGraphBuilder(BaseGraph):
         for i in range(lcm):
             duration = 1 / lcm  # Simplistic division, can be enhanced based on specific rules
             pattern.append(duration)
+        logger.debug(f"Interfered periodicities {p1} and {p2} to create pattern: {pattern}")
         return pattern
 
     def _lcm(self, a: int, b: int) -> int:
@@ -93,6 +104,7 @@ class RhythmGraphBuilder(BaseGraph):
         for pattern_str, details in self.rhythm_systems.items():
             grouping_type = self._determine_cooper_meyer_grouping(details['resultant'])
             groupings[pattern_str] = grouping_type
+            logger.debug(f"Pattern {pattern_str} classified as grouping type: {grouping_type}")
         return groupings
 
     def _determine_cooper_meyer_grouping(self, pattern: List[float]) -> str:
@@ -140,6 +152,7 @@ class RhythmGraphBuilder(BaseGraph):
         diminished = self._diminish_rhythm(pattern)
         transformations.append(self._pattern_to_str(augmented))
         transformations.append(self._pattern_to_str(diminished))
+        logger.debug(f"Generated rhythmic transformations for pattern {self._pattern_to_str(pattern)}: {transformations}")
         return transformations
 
     def _permute_rhythm(self, pattern: List[float]) -> List[List[float]]:
@@ -157,6 +170,7 @@ class RhythmGraphBuilder(BaseGraph):
         for i in range(1, n):
             rotation = pattern[i:] + pattern[:i]
             rotations.append(rotation)
+        logger.debug(f"Generated rotations for pattern {self._pattern_to_str(pattern)}: {rotations}")
         return rotations
 
     def _augment_rhythm(self, pattern: List[float]) -> List[float]:
@@ -183,6 +197,7 @@ class RhythmGraphBuilder(BaseGraph):
         # Additional weight for rhythmic similarity based on Schillinger's interference
         similarity = self._compare_patterns(current_rhythm.pattern, next_rhythm.pattern)
         weight += int(similarity * 5)  # Scale similarity to weight
+        logger.debug(f"Determined weight for transition from {self._pattern_to_str(current_rhythm.pattern)} to {self._pattern_to_str(next_rhythm.pattern)}: {weight}")
         return weight
 
     def _compare_patterns(self, pattern1: List[float], pattern2: List[float]) -> float:
@@ -198,6 +213,7 @@ class RhythmGraphBuilder(BaseGraph):
         if not union:
             return 0
         similarity = len(intersection) / len(union)
+        logger.debug(f"Compared patterns {self._pattern_to_str(pattern1)} and {self._pattern_to_str(pattern2)}: similarity score = {similarity}")
         return similarity
 
     def _set_default_meter(self) -> str:
@@ -221,6 +237,7 @@ class RhythmGraphBuilder(BaseGraph):
         for pattern, count in pattern_counts.items():
             if count > 1:
                 motifs.append(pattern)
+                logger.debug(f"Detected motif: {pattern} with count: {count}")
         
         return motifs
 
@@ -230,9 +247,11 @@ class RhythmGraphBuilder(BaseGraph):
         Integrates Schillinger's decision-making process for rhythmic selection.
         """
         if self._needs_quick_response(current_context):
+            logger.info("Quick rhythm decision needed.")
             return self._quick_rhythm_decision(current_context)
         else:
-                return self._detailed_rhythm_decision(current_context)
+            logger.info("Detailed rhythm decision needed.")
+            return self._detailed_rhythm_decision(current_context)
 
     def _needs_quick_response(self, context):
         """
@@ -247,6 +266,7 @@ class RhythmGraphBuilder(BaseGraph):
         """
         # Use default or common rhythmic patterns influenced by Schillinger's simplicity principle
         default_pattern = [1, 1, 1, 1]  # Quarter notes in 4/4
+        logger.debug(f"Quick rhythm decision made: {default_pattern}")
         return {
             'pattern': default_pattern,
             'tempo': self.tempo,
@@ -265,10 +285,12 @@ class RhythmGraphBuilder(BaseGraph):
                 # Select neighbor with highest weight
                 next_pattern_str = max(neighbors, key=lambda k: neighbors[k]['weight'])
                 pattern = [float(d) for d in next_pattern_str.split('-')]
+                logger.info(f"Detailed rhythm decision made: {pattern} based on current pattern: {current_pattern_str}")
                 return {
                     'pattern': pattern,
                     'tempo': self.tempo,
                     'meter': self.meter
                 }
         # If no suitable pattern, fallback to quick decision
+        logger.warning("No suitable pattern found, falling back to quick decision.")
         return self._quick_rhythm_decision(context)

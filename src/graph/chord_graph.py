@@ -2,6 +2,9 @@ from .base_graph import BaseGraph
 from typing import List, Dict
 from models import ChordEvent
 from mingus.core import chords, keys, progressions, intervals, notes
+import logging
+
+logger = logging.getLogger(__name__)
 
 class ChordGraphBuilder(BaseGraph):
     def __init__(self, key: str = 'C'):
@@ -14,10 +17,13 @@ class ChordGraphBuilder(BaseGraph):
         self.modal_interchange = self._generate_modal_interchange()
         self.barry_harris_scales = self._generate_barry_harris_scales()
         self.harmonic_matrices = self._generate_harmonic_matrices()
+        logger.info(f"Initialized ChordGraphBuilder with key: {self.key}")
 
     def build_chord_graph(self, chords: List[ChordEvent]):
+        logger.info("Building chord graph...")
         for chord in chords:
             functional_role = self.functional_roles.get(chord.symbol, 'unknown')
+            logger.debug(f"Adding node: {chord.symbol} with role: {functional_role}")
             self.add_node(
                 chord.symbol,
                 type=chord.type,
@@ -31,6 +37,7 @@ class ChordGraphBuilder(BaseGraph):
             for next_chord in possible_transitions:
                 if next_chord in [c.symbol for c in chords]:
                     weight = self._determine_weight(next_chord)
+                    logger.debug(f"Adding edge from {chord.symbol} to {next_chord} with weight: {weight}")
                     self.add_edge(
                         chord.symbol,
                         next_chord,
@@ -43,6 +50,7 @@ class ChordGraphBuilder(BaseGraph):
             interchange_chords = self.modal_interchange.get(chord.symbol, [])
             for interm_chord in interchange_chords:
                 if interm_chord in [c.symbol for c in chords]:
+                    logger.debug(f"Adding modal interchange edge from {chord.symbol} to {interm_chord}")
                     self.add_edge(
                         chord.symbol,
                         interm_chord,
@@ -55,6 +63,7 @@ class ChordGraphBuilder(BaseGraph):
             bh_transitions = self.barry_harris_scales.get(chord.symbol, [])
             for bh_chord in bh_transitions:
                 if bh_chord in [c.symbol for c in chords]:
+                    logger.debug(f"Adding Barry Harris edge from {chord.symbol} to {bh_chord}")
                     self.add_edge(
                         chord.symbol,
                         bh_chord,
@@ -67,6 +76,7 @@ class ChordGraphBuilder(BaseGraph):
             matrix_chords = self.harmonic_matrices.get(chord.symbol, [])
             for matrix_chord in matrix_chords:
                 if matrix_chord in [c.symbol for c in chords]:
+                    logger.debug(f"Adding harmonic matrix edge from {chord.symbol} to {matrix_chord}")
                     self.add_edge(
                         chord.symbol,
                         matrix_chord,
@@ -78,6 +88,7 @@ class ChordGraphBuilder(BaseGraph):
         for chord in chords:
             if '/' in chord.symbol:
                 root, bass = chord.symbol.split('/')
+                logger.debug(f"Adding inversion edge from {bass} to {chord.symbol}")
                 self.add_edge(
                     bass,
                     chord.symbol,
@@ -106,6 +117,7 @@ class ChordGraphBuilder(BaseGraph):
                 else:
                     role = 'pre-dominant'
                 roles[chord_symbol] = role
+                logger.debug(f"Assigned role '{role}' to chord '{chord_symbol}'")
         return roles
 
     def _generate_circle_of_fifths(self) -> Dict[str, List[str]]:
@@ -123,6 +135,7 @@ class ChordGraphBuilder(BaseGraph):
                 (notes.note_to_int(chord_symbol) + 5) % 12
             ) + 'maj7'
             circle[chord_symbol] = [fifth_above, fifth_below]
+            logger.debug(f"Circle of Fifths for {chord_symbol}: {circle[chord_symbol]}")
         return circle
 
     def _generate_modal_interchange(self) -> Dict[str, List[str]]:
@@ -139,6 +152,7 @@ class ChordGraphBuilder(BaseGraph):
                 if chord_name:
                     chord_symbol = chord_name[0]
                     interchange.setdefault(chord_symbol, []).append(chord_symbol)
+                    logger.debug(f"Modal interchange for {chord_symbol}: {interchange[chord_symbol]}")
         return interchange
 
     def _generate_barry_harris_scales(self) -> Dict[str, List[str]]:
@@ -156,6 +170,7 @@ class ChordGraphBuilder(BaseGraph):
             if chord_name:
                 chord_symbol = chord_name[0]
                 bh_scales.setdefault(chord_symbol, []).append(chord_symbol)
+                logger.debug(f"Barry Harris scale for {chord_symbol}: {bh_scales[chord_symbol]}")
         return bh_scales
 
     def _barry_harris_scale(self) -> List[str]:
@@ -167,6 +182,7 @@ class ChordGraphBuilder(BaseGraph):
             (notes.note_to_int(major_scale[5]) + 1) % 12
         )
         bh_scale = major_scale[:5] + [diminished_note] + major_scale[5:]
+        logger.debug(f"Generated Barry Harris scale for key {self.key}: {bh_scale}")
         return bh_scale
 
     def _generate_harmonic_matrices(self) -> Dict[str, List[str]]:
@@ -180,6 +196,7 @@ class ChordGraphBuilder(BaseGraph):
             tritone_note = intervals.get_tone_from_semitones(root_note, 6)
             tritone_chord = tritone_note + chord_symbol[-3:]
             matrices.setdefault(chord_symbol, []).append(tritone_chord)
+            logger.debug(f"Generated harmonic matrix for {chord_symbol}: {matrices[chord_symbol]}")
         return matrices
 
     def _determine_weight(self, next_chord: str) -> int:
@@ -194,4 +211,6 @@ class ChordGraphBuilder(BaseGraph):
             'unknown': 5
         }
         role = self.functional_roles.get(next_chord, 'unknown')
-        return role_weights.get(role, 5)
+        weight = role_weights.get(role, 5)
+        logger.debug(f"Determined weight for transition to {next_chord}: {weight}")
+        return weight

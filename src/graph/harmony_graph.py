@@ -1,9 +1,13 @@
 from typing import List, Dict
+import logging
 
 from mingus.core import chords, keys, progressions, intervals
 
 from models import NoteEvent, ChordEvent, RhythmEvent, TimbreEvent, OtherEvent
 from .base_graph import BaseGraph
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 def degrees_to_roman(degree):
     return progressions.int_to_roman(degree)
@@ -19,6 +23,7 @@ class HarmonyGraphBuilder(BaseGraph):
         self.functional_roles = self._generate_functional_roles()
         self.circle_of_fifths = self._generate_circle_of_fifths()
         self.modal_interchange = self._generate_modal_interchange()
+        logger.info(f'HarmonyGraphBuilder initialized with key: {self.key}')
 
     def _generate_functional_roles(self) -> Dict[str, str]:
         """
@@ -41,6 +46,8 @@ class HarmonyGraphBuilder(BaseGraph):
             secondary_dom = progressions.secondary_dominant(self.key, degree)
             if secondary_dom:
                 roles[secondary_dom] = f'secondary_dominant_of_{degrees_to_roman(degree)}'
+                logger.debug(f'Added secondary dominant: {secondary_dom}')
+        
         # Modal Interchange Chords
         modes = ['mixolydian', 'dorian', 'phrygian', 'lydian', 'aeolian', 'locrian']
         for mode in modes:
@@ -48,6 +55,7 @@ class HarmonyGraphBuilder(BaseGraph):
             for chord in modal_chords:
                 if chord not in roles:
                     roles[chord] = f'modal_{mode}'
+                    logger.debug(f'Added modal interchange chord: {chord} for mode: {mode}')
         return roles
 
     def _generate_circle_of_fifths(self) -> Dict[str, List[str]]:
@@ -62,6 +70,7 @@ class HarmonyGraphBuilder(BaseGraph):
             secondary_dominants = progressions.secondary_dominant(self.key, i)
             transitions = [dominant, subdominant] + secondary_dominants
             circle[chord] = transitions
+            logger.debug(f'Circle of Fifths for {chord}: {transitions}')
         return circle
 
     def _generate_modal_interchange(self) -> Dict[str, List[str]]:
@@ -77,6 +86,7 @@ class HarmonyGraphBuilder(BaseGraph):
                 mode_chords = keys.get_chords(self.key, mode)
                 interchange_chords.extend([c for c in mode_chords if c not in diatonic_chords])
             interchange[chord] = list(set(interchange_chords))  # Remove duplicates
+            logger.debug(f'Modal interchange for {chord}: {interchange[chord]}')
         return interchange
 
     def _identify_mode(self, chord: str) -> str:
@@ -115,14 +125,17 @@ class HarmonyGraphBuilder(BaseGraph):
         for chord_type in chord_info:
             mode = chord_to_mode_mapping.get(chord_type.lower())
             if mode:
+                logger.debug(f'Identified mode {mode} for chord type {chord_type}')
                 return mode
 
+        logger.warning(f'No mode identified for chord: {chord}')
         return ''
 
     def build_harmony_graph(self, events: List):
         """
         Build the harmony graph incrementally based on a list of musical events.
         """
+        logger.info('Building harmony graph...')
         for event in events:
             if isinstance(event, ChordEvent):
                 self._process_chord_event(event, events)
@@ -146,6 +159,8 @@ class HarmonyGraphBuilder(BaseGraph):
             functional_role=functional_role,
             degrees=chord.degrees
         )
+        logger.info(f'Processed chord event: {chord.symbol} with role: {functional_role}')
+        
         # Define harmony transitions based on Circle of Fifths
         possible_transitions = self.circle_of_fifths.get(chord.symbol, [])
         for next_chord in possible_transitions:
@@ -157,6 +172,8 @@ class HarmonyGraphBuilder(BaseGraph):
                     resolution=True,
                     weight=weight
                 )
+                logger.debug(f'Added edge from {chord.symbol} to {next_chord} with weight: {weight}')
+        
         # Handle Modal Interchange Transitions
         interchange_chords = self.modal_interchange.get(chord.symbol, [])
         for interm_chord in interchange_chords:
@@ -167,6 +184,8 @@ class HarmonyGraphBuilder(BaseGraph):
                     modal_interchange=True,
                     weight=7
                 )
+                logger.debug(f'Added modal interchange edge from {chord.symbol} to {interm_chord}')
+        
         # Handle Chord Inversions
         if '/' in chord.symbol:
             root, bass = chord.symbol.split('/')
@@ -176,6 +195,7 @@ class HarmonyGraphBuilder(BaseGraph):
                 inversion=True,
                 weight=9
             )
+            logger.debug(f'Added inversion edge from {bass} to {chord.symbol}')
 
     def _process_note_event(self, note: NoteEvent):
         """
@@ -187,6 +207,8 @@ class HarmonyGraphBuilder(BaseGraph):
             duration=note.duration,
             intensity=note.intensity
         )
+        logger.info(f'Processed note event: {note.pitch} with duration: {note.duration} and intensity: {note.intensity}')
+        
         # Connect notes based on voice leading and melodic patterns
         if self.previous_note:
             voice_leading_weight = self._calculate_voice_leading_weight(self.previous_note.pitch, note.pitch)
@@ -196,6 +218,7 @@ class HarmonyGraphBuilder(BaseGraph):
                 voice_leading=True,
                 weight=voice_leading_weight
             )
+            logger.debug(f'Added voice leading edge from {self.previous_note.pitch} to {note.pitch} with weight: {voice_leading_weight}')
         self.previous_note = note
 
     def _calculate_voice_leading_weight(self, from_pitch: str, to_pitch: str) -> int:
@@ -219,7 +242,8 @@ class HarmonyGraphBuilder(BaseGraph):
             interval_number = intervals.distance(from_pitch, to_pitch)
             interval_name = intervals.int_to_note_name(interval_number)
             return interval_name
-        except:
+        except Exception as e:
+            logger.error(f'Error calculating interval from {from_pitch} to {to_pitch}: {e}')
             return 'unknown'
 
     def _process_rhythm_event(self, rhythm: RhythmEvent):
@@ -232,6 +256,8 @@ class HarmonyGraphBuilder(BaseGraph):
             pattern=rhythm.pattern,
             tempo=rhythm.tempo
         )
+        logger.info(f'Processed rhythm event: {rhythm.pattern_id} with pattern: {rhythm.pattern} and tempo: {rhythm.tempo}')
+        
         # Connect rhythms to chords or notes exhaustively
         # Example: Connect to the most recent chord and note
         last_chord = self._get_last_chord()
@@ -243,6 +269,7 @@ class HarmonyGraphBuilder(BaseGraph):
                 rhythm=True,
                 weight=5
             )
+            logger.debug(f'Added edge from {last_chord.symbol} to rhythm {rhythm.pattern_id}')
         if last_note:
             self.add_edge(
                 last_note.pitch,
@@ -250,6 +277,7 @@ class HarmonyGraphBuilder(BaseGraph):
                 rhythm=True,
                 weight=5
             )
+            logger.debug(f'Added edge from {last_note.pitch} to rhythm {rhythm.pattern_id}')
 
     def _get_last_chord(self) -> ChordEvent:
         """
@@ -259,9 +287,9 @@ class HarmonyGraphBuilder(BaseGraph):
                         if attrs.get('type') == 'chord']
         if chord_nodes:
             last_chord = chord_nodes[-1]
-            # Retrieve the ChordEvent associated with the last chord node
-            # Assuming there's a way to map node to ChordEvent, e.g., a lookup dictionary
+            logger.debug(f'Last chord retrieved: {last_chord}')
             return self._lookup_chord_event(last_chord)
+        logger.warning('No last chord found.')
         return None
 
     def _lookup_chord_event(self, chord_symbol: str) -> ChordEvent:
@@ -270,7 +298,9 @@ class HarmonyGraphBuilder(BaseGraph):
         """
         for node, attrs in self.graph.nodes(data=True):
             if node == chord_symbol and attrs.get('type') == 'chord':
+                logger.debug(f'ChordEvent found for symbol: {chord_symbol}')
                 return ChordEvent(symbol=node, type=attrs.get('type'), degrees=attrs.get('degrees'))
+        logger.warning(f'ChordEvent not found for symbol: {chord_symbol}')
         return ChordEvent(symbol=chord_symbol, type='chord', degrees=[])
 
     def _get_last_note(self) -> NoteEvent:
@@ -281,8 +311,9 @@ class HarmonyGraphBuilder(BaseGraph):
                         if attrs.get('type') == 'note']
         if note_nodes:
             last_note = note_nodes[-1]
-            # Retrieve the NoteEvent associated with the last note node
+            logger.debug(f'Last note retrieved: {last_note}')
             return self._lookup_note_event(last_note)
+        logger.warning('No last note found.')
         return None
 
     def _lookup_note_event(self, note_pitch: str) -> NoteEvent:
@@ -291,7 +322,9 @@ class HarmonyGraphBuilder(BaseGraph):
         """
         for node, attrs in self.graph.nodes(data=True):
             if node == note_pitch and attrs.get('type') == 'note':
+                logger.debug(f'NoteEvent found for pitch: {note_pitch}')
                 return NoteEvent(pitch=node, duration=attrs.get('duration', 0), intensity=attrs.get('intensity', 0))
+        logger.warning(f'NoteEvent not found for pitch: {note_pitch}')
         return NoteEvent(pitch=note_pitch, duration=0, intensity=0)
 
     def _process_timbre_event(self, timbre: TimbreEvent):
@@ -303,6 +336,8 @@ class HarmonyGraphBuilder(BaseGraph):
             type='timbre',
             characteristics=timbre.characteristics
         )
+        logger.info(f'Processed timbre event: {timbre.instrument} with characteristics: {timbre.characteristics}')
+        
         # Connect timbre nodes to other relevant nodes exhaustively, e.g., all notes and chords
         connected_nodes = self._get_connected_nodes()
         for node in connected_nodes:
@@ -312,14 +347,17 @@ class HarmonyGraphBuilder(BaseGraph):
                 timbre=True,
                 weight=4
             )
+            logger.debug(f'Added edge from timbre {timbre.instrument} to {node}')
 
     def _get_connected_nodes(self) -> List[str]:
         """
         Retrieve nodes that should be connected to timbre events.
         """
-            # Connect to all note and chord nodes
-        return [node for node, attrs in self.graph.nodes(data=True) 
+        # Connect to all note and chord nodes
+        connected_nodes = [node for node, attrs in self.graph.nodes(data=True) 
                 if attrs.get('type') in ['note', 'chord']]
+        logger.debug(f'Connected nodes for timbre: {connected_nodes}')
+        return connected_nodes
 
     def _process_other_event(self, other: OtherEvent):
         """
@@ -330,6 +368,8 @@ class HarmonyGraphBuilder(BaseGraph):
             type='other',
             description=other.description
         )
+        logger.info(f'Processed other event: {other.identifier} with description: {other.description}')
+        
         # Define connections based on the nature of the other event
         related_nodes = self._find_related_nodes(other)
         for node in related_nodes:
@@ -339,14 +379,17 @@ class HarmonyGraphBuilder(BaseGraph):
                 other=True,
                 weight=3
             )
+            logger.debug(f'Added edge from other event {other.identifier} to {node}')
 
     def _find_related_nodes(self, other: OtherEvent) -> List[str]:
         """
         Find nodes related to the other event based on specific criteria.
         """
         # Example implementation: relate to all motifs
-        return [node for node, attrs in self.graph.nodes(data=True) 
+        related_nodes = [node for node, attrs in self.graph.nodes(data=True) 
                 if attrs.get('type') == 'motif']
+        logger.debug(f'Related nodes for other event: {related_nodes}')
+        return related_nodes
 
     def _detect_motifs(self, events: List):
         """
@@ -359,6 +402,7 @@ class HarmonyGraphBuilder(BaseGraph):
                 type='motif',
                 elements=motif['elements']
             )
+            logger.info(f'Detected motif: {motif["id"]} with elements: {motif["elements"]}')
             # Connect motifs to relevant nodes exhaustively
             for element in motif['elements']:
                 self.add_edge(
@@ -367,6 +411,7 @@ class HarmonyGraphBuilder(BaseGraph):
                     motif_connection=True,
                     weight=6
                 )
+                logger.debug(f'Added motif connection from {motif["id"]} to {element}')
 
     def _find_motifs(self, events: List) -> List[Dict]:
         """
@@ -388,10 +433,12 @@ class HarmonyGraphBuilder(BaseGraph):
                         'id': motif_id,
                         'elements': motif_seq
                     })
+                    logger.debug(f'Found motif: {motif_id} with sequence: {motif_seq}')
         # Remove duplicate motifs
         unique_motifs = {}
         for m in motifs:
             unique_motifs[m['id']] = m
+        logger.info(f'Unique motifs detected: {list(unique_motifs.keys())}')
         return list(unique_motifs.values())
 
     def _determine_weight(self, next_chord: str) -> int:
@@ -408,12 +455,15 @@ class HarmonyGraphBuilder(BaseGraph):
             'unknown': 8
         }
         role = self.functional_roles.get(next_chord, 'unknown')
-        return role_weights.get(role, 8)
+        weight = role_weights.get(role, 8)
+        logger.debug(f'Determined weight for {next_chord} with role {role}: {weight}')
+        return weight
 
     def decide_improvisation(self, current_context):
         """
         Make an improvisation decision based on the current context and graph state.
         """
+        logger.info('Deciding improvisation...')
         # If quick response needed, use minimal context
         if self._needs_quick_response(current_context):
             return self._quick_improv_decision(current_context)
@@ -426,7 +476,9 @@ class HarmonyGraphBuilder(BaseGraph):
         Determine if a quick response is needed based on the context.
         """
         # Determine if the remaining time is below the threshold
-        return context.get('time_remaining', 0) < self.threshold_time
+        quick_response_needed = context.get('time_remaining', 0) < self.threshold_time
+        logger.debug(f'Quick response needed: {quick_response_needed}')
+        return quick_response_needed
 
     def _quick_improv_decision(self, context):
         """
@@ -443,6 +495,7 @@ class HarmonyGraphBuilder(BaseGraph):
         improv_choice = self._analyze_graph_for_improv(context)
         # If analysis fails, fallback to music theory engine
         if not improv_choice:
+            logger.warning('Detailed improvisation decision failed, falling back to music theory engine.')
             return self._music_theory_engine(context)
         return improv_choice
 
@@ -455,6 +508,7 @@ class HarmonyGraphBuilder(BaseGraph):
         next_chord = self._next_diatonic_chord(current_chord)
         rhythm = self._default_rhythm()
         notes = self._scale_notes(next_chord)
+        logger.info(f'Music theory engine output: chord: {next_chord}, rhythm: {rhythm}, notes: {notes}')
         return {
             'chord': next_chord,
             'rhythm': rhythm,
@@ -468,7 +522,9 @@ class HarmonyGraphBuilder(BaseGraph):
         # Use Circle of Fifths transitions
         circle = self.circle_of_fifths.get(current_chord, [])
         if circle:
+            logger.debug(f'Next diatonic chord from {current_chord}: {circle[0]}')
             return circle[0]  # Choose the first possible transition
+        logger.debug(f'No next diatonic chord found, defaulting to tonic: {self.tonic}')
         return self.tonic  # Default to tonic if no transition found
 
     def _default_rhythm(self) -> List:
@@ -483,8 +539,10 @@ class HarmonyGraphBuilder(BaseGraph):
         """
         try:
             chord_notes = chords.from_shorthand(chord)
+            logger.debug(f'Scale notes for chord {chord}: {chord_notes}')
             return chord_notes
-        except:
+        except Exception as e:
+            logger.error(f'Error retrieving scale notes for chord {chord}: {e}')
             return keys.get_scale(self.key, 'major').ascending()
 
     def _analyze_graph_for_improv(self, context):
@@ -495,15 +553,18 @@ class HarmonyGraphBuilder(BaseGraph):
         chords = [node for node, attrs in self.graph.nodes(data=True) 
                     if attrs.get('type') == 'chord']
         if not chords:
+            logger.warning('No chords found for improvisation analysis.')
             return {}
         chord_connections = {chord: self.graph.degree(chord) 
                                 for chord in chords}
         if not chord_connections:
+            logger.warning('No chord connections found for improvisation analysis.')
             return {}
         # Choose the chord with the highest connections
         next_chord = max(chord_connections, key=chord_connections.get)
         rhythm = self._default_rhythm()
         notes = self._scale_notes(next_chord)
+        logger.info(f'Analyzed graph for improv: next chord: {next_chord}, rhythm: {rhythm}, notes: {notes}')
         return {
             'chord': next_chord,
             'rhythm': rhythm,
@@ -518,10 +579,12 @@ class HarmonyGraphBuilder(BaseGraph):
         # For example, retrieve the current time, active chords, and other real-time data
         current_time = self._retrieve_current_time()
         current_chord = self._retrieve_current_chord()
-        return {
+        context = {
             'time_remaining': self.threshold_time - current_time,
             'current_chord': current_chord
         }
+        logger.debug(f'Current context retrieved: {context}')
+        return context
 
     def _retrieve_current_time(self) -> float:
         """
@@ -541,5 +604,7 @@ class HarmonyGraphBuilder(BaseGraph):
             chord_nodes = [node for node, attrs in self.graph.nodes(data=True) 
                             if attrs.get('type') == 'chord']
             if chord_nodes:
+                logger.debug(f'Current active chord: {chord_nodes[-1]}')
                 return chord_nodes[-1]
+        logger.debug('No current active chord found, defaulting to tonic.')
         return self.tonic

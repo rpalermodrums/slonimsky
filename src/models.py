@@ -1,5 +1,8 @@
 from typing import List, Literal, Dict, Any
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
+import logging
+
+logger = logging.getLogger(__name__)
 
 class NoteEvent(BaseModel):
     note: str
@@ -8,12 +11,14 @@ class NoteEvent(BaseModel):
     beat_type: Literal['strong', 'weak', 'neutral']
     consonance: Literal['consonant', 'dissonant']
 
-    @validator('note')
+    @field_validator('note')
     def validate_note_format(cls, v):
         import re
         pattern = r'^[A-Ga-g](#|b)?\d+$'
         if not re.match(pattern, v):
+            logger.error('Invalid note format: %s. Expected format like "C4", "G#3", etc.', v)
             raise ValueError('Invalid note format. Expected format like "C4", "G#3", etc.')
+        logger.debug('Note format validated: %s', v)
         return v
 
     class Config:
@@ -27,16 +32,20 @@ class Edge(BaseModel):
     interval: int
     melodic_rules: Dict[str, bool]
 
-    @validator('weight')
+    @field_validator('weight')
     def validate_weight(cls, v):
         if not (0 <= v <= 100):
+            logger.error('Invalid weight: %s. Weight must be between 0 and 100.', v)
             raise ValueError('Weight must be between 0 and 100.')
+        logger.debug('Weight validated: %s', v)
         return v
 
-    @validator('interval')
+    @field_validator('interval')
     def validate_interval(cls, v):
         if not (-24 <= v <= 24):
+            logger.error('Invalid interval: %s. Interval must be between -24 and 24 semitones.', v)
             raise ValueError('Interval must be between -24 and 24 semitones.')
+        logger.debug('Interval validated: %s', v)
         return v
 
 class Transition(BaseModel):
@@ -66,16 +75,20 @@ class RhythmEvent(BaseModel):
     pattern: str = Field(..., description="Rhythmic pattern notation, e.g., 'quarter, quarter, half'")
     tempo: int = Field(..., ge=20, le=300, description="Tempo in beats per minute")
 
-    @validator('pattern_id')
+    @field_validator('pattern_id')
     def validate_pattern_id(cls, v):
         if not v:
+            logger.error('Invalid pattern_id: %s. pattern_id must be a non-empty string.', v)
             raise ValueError('pattern_id must be a non-empty string.')
+        logger.debug('Pattern ID validated: %s', v)
         return v
 
-    @validator('pattern')
+    @field_validator('pattern')
     def validate_pattern(cls, v):
         if not v:
+            logger.error('Invalid pattern: %s. pattern must be a non-empty string.', v)
             raise ValueError('pattern must be a non-empty string.')
+        logger.debug('Pattern validated: %s', v)
         # Additional pattern validation can be added here
         return v
 
@@ -90,16 +103,20 @@ class TimbreEvent(BaseModel):
         description="Characteristics of the timbre, such as 'bright': True, 'reverb': 'large'"
     )
 
-    @validator('instrument')
+    @field_validator('instrument')
     def validate_instrument(cls, v):
         if not v:
+            logger.error('Invalid instrument: %s. instrument must be a non-empty string.', v)
             raise ValueError('instrument must be a non-empty string.')
+        logger.debug('Instrument validated: %s', v)
         return v
 
-    @validator('characteristics')
+    @field_validator('characteristics')
     def validate_characteristics(cls, v):
         if not isinstance(v, dict):
+            logger.error('Invalid characteristics: %s. characteristics must be a dictionary.', v)
             raise ValueError('characteristics must be a dictionary.')
+        logger.debug('Characteristics validated: %s', v)
         # Additional validation for characteristics can be added here
         return v
 
@@ -112,16 +129,20 @@ class OtherEvent(BaseModel):
     identifier: str = Field(..., description="Unique identifier for the event")
     description: str = Field(..., description="Description of the event")
 
-    @validator('identifier')
+    @field_validator('identifier')
     def validate_identifier(cls, v):
         if not v:
+            logger.error('Invalid identifier: %s. identifier must be a non-empty string.', v)
             raise ValueError('identifier must be a non-empty string.')
+        logger.debug('Identifier validated: %s', v)
         return v
 
-    @validator('description')
+    @field_validator('description')
     def validate_description(cls, v):
         if not v:
+            logger.error('Invalid description: %s. description must be a non-empty string.', v)
             raise ValueError('description must be a non-empty string.')
+        logger.debug('Description validated: %s', v)
         return v
 
     class Config:

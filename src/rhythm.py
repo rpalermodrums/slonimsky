@@ -2,6 +2,10 @@ import random
 from typing import List, Union, Dict, Callable
 import itertools
 import math
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 class RhythmicPatternGenerator:
     def __init__(self, tempo: int = 120):
@@ -18,6 +22,7 @@ class RhythmicPatternGenerator:
             'mixed': {'pulses': 5, 'steps': 8},  # Mixed durations using 5 pulses in 8 steps
             'rests': {'pulses': 2, 'steps': 4},  # Patterns with rests
         }
+        logger.info("RhythmicPatternGenerator initialized with tempo: %d BPM", self.tempo)
 
     def generate_euclidean_rhythm(self, pulses: int, steps: int) -> List[int]:
         """
@@ -28,6 +33,7 @@ class RhythmicPatternGenerator:
         :return: List representing the rhythm with 1s for pulses and 0s for rests
         """
         if pulses > steps:
+            logger.error("Number of pulses cannot exceed number of steps.")
             raise ValueError("Number of pulses cannot exceed number of steps.")
 
         pattern = []
@@ -35,6 +41,8 @@ class RhythmicPatternGenerator:
         remainders = []
         divisor = steps - pulses
         remainders.append(pulses)
+        logger.debug("Starting Euclidean rhythm generation with pulses: %d, steps: %d", pulses, steps)
+        
         while True:
             quotient, remainder = divmod(remainders[-1], divisor)
             counts.append(quotient)
@@ -54,6 +62,7 @@ class RhythmicPatternGenerator:
             return pattern
 
         pattern = build([], counts, remainders)
+        logger.debug("Generated Euclidean pattern: %s", pattern)
         # Truncate or pad the pattern to match the exact number of steps
         return pattern[:steps].tolist() if hasattr(pattern, 'tolist') else pattern[:steps]
 
@@ -66,11 +75,13 @@ class RhythmicPatternGenerator:
         :return: List representing the rhythmic pattern (durations and rests)
         """
         if rhythm_type not in self.rhythm_types:
+            logger.error("Rhythm type '%s' not recognized. Available types: %s", rhythm_type, list(self.rhythm_types.keys()))
             raise ValueError(f"Rhythm type '{rhythm_type}' not recognized. Available types: {list(self.rhythm_types.keys())}")
 
         rhythm_params = self.rhythm_types[rhythm_type]
         pulses = rhythm_params['pulses']
         steps = rhythm_params['steps']
+        logger.info("Generating rhythmic pattern of type '%s' with length %d", rhythm_type, pattern_length)
 
         euclidean_pattern = self.generate_euclidean_rhythm(pulses, steps)
         pattern = []
@@ -81,6 +92,7 @@ class RhythmicPatternGenerator:
                 else:
                     pattern.append('rest')  # Rest
 
+        logger.debug("Generated rhythmic pattern: %s", pattern)
         return pattern
 
     def generate_schillinger_rhythm(self, numerator: int, denominator: int) -> List[float]:
@@ -93,6 +105,8 @@ class RhythmicPatternGenerator:
         """
         lcm = self._lcm(numerator, denominator)
         pattern = []
+        logger.debug("Generating Schillinger rhythm with numerator: %d, denominator: %d", numerator, denominator)
+        
         for i in range(lcm):
             if i % (lcm // numerator) == 0 and i % (lcm // denominator) == 0:
                 pattern.append('both')
@@ -103,6 +117,7 @@ class RhythmicPatternGenerator:
             else:
                 pattern.append('rest')
         durations = self._convert_events_to_durations(pattern)
+        logger.debug("Generated Schillinger rhythm: %s", durations)
         return durations
 
     def generate_rhythmic_grouping(self, pattern: List[float]) -> List[List[float]]:
@@ -114,6 +129,8 @@ class RhythmicPatternGenerator:
         """
         groups = []
         i = 0
+        logger.debug("Generating rhythmic grouping for pattern: %s", pattern)
+        
         while i < len(pattern):
             group = [pattern[i]]
             # Group notes into twos or threes if they are short
@@ -126,6 +143,7 @@ class RhythmicPatternGenerator:
             else:
                 i += 1
             groups.append(group)
+        logger.debug("Grouped rhythmic pattern: %s", groups)
         return groups
 
     def augment_rhythm(self, pattern: List[float], factor: float) -> List[float]:
@@ -136,7 +154,9 @@ class RhythmicPatternGenerator:
         :param factor: Factor by which to augment (>1) or diminish (<1) the durations
         :return: Transformed rhythmic pattern
         """
-        return [duration * factor if isinstance(duration, float) else duration for duration in pattern]
+        augmented_pattern = [duration * factor if isinstance(duration, float) else duration for duration in pattern]
+        logger.debug("Augmented rhythm with factor %f: %s", factor, augmented_pattern)
+        return augmented_pattern
 
     def permute_rhythm(self, pattern: List[float]) -> List[List[float]]:
         """
@@ -145,7 +165,9 @@ class RhythmicPatternGenerator:
         :param pattern: Original rhythmic pattern
         :return: List of all permutations of the pattern
         """
-        return list(itertools.permutations(pattern))
+        permutations = list(itertools.permutations(pattern))
+        logger.debug("Generated permutations of rhythm: %s", permutations)
+        return permutations
 
     def rotate_rhythm(self, pattern: List[float]) -> List[List[float]]:
         """
@@ -156,9 +178,12 @@ class RhythmicPatternGenerator:
         """
         rotations = []
         n = len(pattern)
+        logger.debug("Generating rotations for rhythm: %s", pattern)
+        
         for i in range(n):
             rotation = pattern[i:] + pattern[:i]
             rotations.append(rotation)
+        logger.debug("Generated rotations: %s", rotations)
         return rotations
 
     def generate_polyrhythm(self, pulses: List[int]) -> List[float]:
@@ -170,11 +195,14 @@ class RhythmicPatternGenerator:
         """
         lcm = self._lcm_multiple(pulses)
         pattern = ['rest'] * lcm
+        logger.debug("Generating polyrhythm with pulses: %s", pulses)
+        
         for pulse in pulses:
             step = lcm // pulse
             for i in range(0, lcm, step):
                 pattern[i] = 'hit' if pattern[i] == 'rest' else 'hit+'
         durations = self._convert_events_to_durations(pattern)
+        logger.debug("Generated polyrhythmic pattern: %s", durations)
         return durations
 
     def _convert_events_to_durations(self, events: List[str]) -> List[float]:
@@ -186,6 +214,8 @@ class RhythmicPatternGenerator:
         """
         durations = []
         count = 0
+        logger.debug("Converting events to durations: %s", events)
+        
         for event in events:
             if event != 'rest':
                 if count > 0:
@@ -196,6 +226,7 @@ class RhythmicPatternGenerator:
                 count += 1
         if count > 0:
             durations.append(count * self.beat_duration)
+        logger.debug("Converted durations: %s", durations)
         return durations
 
     def _lcm(self, a: int, b: int) -> int:
@@ -206,7 +237,9 @@ class RhythmicPatternGenerator:
         :param b: Second integer
         :return: Least common multiple
         """
-        return abs(a * b) // math.gcd(a, b)
+        lcm = abs(a * b) // math.gcd(a, b)
+        logger.debug("Computed LCM of %d and %d: %d", a, b, lcm)
+        return lcm
 
     def _lcm_multiple(self, numbers: List[int]) -> int:
         """
@@ -216,6 +249,9 @@ class RhythmicPatternGenerator:
         :return: Least common multiple
         """
         lcm = numbers[0]
+        logger.debug("Computing LCM for numbers: %s", numbers)
+        
         for number in numbers[1:]:
             lcm = self._lcm(lcm, number)
+        logger.debug("Computed LCM for list: %d", lcm)
         return lcm

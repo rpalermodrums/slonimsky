@@ -77,7 +77,6 @@ def main():
                     args.root_note, args.bpm, args.progression_pattern)
     except ValueError as e:
         logger.error("Input validation error: %s", e)
-        print(f"Input validation error: {e}")
         sys.exit(1)
     
     if not initialize_fluidsynth():
@@ -124,14 +123,12 @@ def main():
         logger.info("Generating melody using Dijkstra's algorithm.")
         melody = melody_gen.generate_melody_dijkstra()
         logger.debug("Generated Melody: %s", melody)
-        print(f"Generated Melody: {melody}")
         
         if audio_available:
             logger.info("Playing melody through MIDI.")
             play_note_sequence(melody, bpm=args.bpm)
     except Exception as e:
         logger.exception("Error generating or playing melody.")
-        print(f"Error generating or playing melody: {e}")
     
     logger.info("Musical Pattern Generator finished successfully.")
     

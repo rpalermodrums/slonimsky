@@ -1,5 +1,6 @@
 import networkx as nx
 import threading
+import logging
 
 from typing import List
 from graph.chord_graph import ChordGraphBuilder
@@ -23,6 +24,9 @@ from playback import initialize_fluidsynth, play_scale, play_progression
 from melody import MelodyGenerator
 from models import NoteEvent, RhythmicPattern, Motif
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 class SlonimskyGUI:
     def __init__(self, root):
         self.root = root
@@ -37,6 +41,9 @@ class SlonimskyGUI:
                 "Audio Unavailable",
                 "FluidSynth initialization failed. Audio playback will be disabled."
             )
+            logger.warning("FluidSynth initialization failed. Audio playback will be disabled.")
+        else:
+            logger.info("FluidSynth initialized successfully.")
         self.create_menu()
 
     def create_menu(self):
@@ -134,12 +141,15 @@ class SlonimskyGUI:
 
             # Validate inputs
             validate_arguments(root_note=root_note, bpm=bpm, progression_pattern=progression_pattern)
+            logger.info(f"Inputs validated: root_note={root_note}, bpm={bpm}, progression_pattern={progression_pattern}")
 
             # Generate scale
             main_scale = self.scale_gen.generate_scale(root_note)
+            logger.info(f"Generated scale: {main_scale}")
 
             # Build Chord Progression
             chord_progression = self.chord_builder.build_chords(progression_pattern, main_scale)
+            logger.info(f"Built chord progression: {chord_progression}")
 
             # Define rhythms and motifs (could be expanded or loaded from configurations)
             rhythms = [
@@ -172,6 +182,7 @@ class SlonimskyGUI:
                 motifs=motifs
             )
             self.integrated_graph = integrated_graph_builder.get_integrated_graph()
+            logger.info("Integrated graph built successfully.")
 
             # Visualize the graph
             self.visualize_graph()
@@ -181,22 +192,28 @@ class SlonimskyGUI:
             melody = melody_gen.generate_melody_dijkstra()
             self.display_melody(melody)
             self.status_var.set("Melody generated successfully.")
+            logger.info("Melody generated successfully.")
 
             # Play Melody
             if self.audio_available:
                 play_note_sequence(melody, bpm=bpm)
+                logger.info("Playing generated melody.")
         except ValidationError as ve:
+            logger.error(f"Validation error: {str(ve)}")
             messagebox.showerror("Validation Error", str(ve))
             self.status_var.set("Validation Error")
         except ValueError as ve:
+            logger.error(f"Input error: {str(ve)}")
             messagebox.showerror("Input Error", str(ve))
             self.status_var.set("Input Error")
         except Exception as e:
+            logger.exception("Error generating melody")
             messagebox.showerror("Error", str(e))
             self.status_var.set("Error generating melody")
 
     def visualize_graph(self):
         if not self.integrated_graph:
+            logger.warning("No integrated graph to visualize.")
             return
 
         self.ax.clear()
@@ -244,15 +261,18 @@ class SlonimskyGUI:
 
         self.ax.axis('off')
         self.canvas.draw()
+        logger.info("Graph visualized successfully.")
 
     def display_melody(self, melody: List[str]):
         self.melody_listbox.delete(0, tk.END)
         for idx, note in enumerate(melody, start=1):
             self.melody_listbox.insert(tk.END, f"{idx}: {note}")
+        logger.info("Displayed generated melody in the listbox.")
 
     def export_midi(self):
         if not self.catalog.scales:
             messagebox.showinfo("No Scales", "No scales available to export.")
+            logger.warning("Attempted to export MIDI with no scales available.")
             return
 
         file_path = filedialog.asksaveasfilename(
@@ -275,7 +295,9 @@ class SlonimskyGUI:
                 midi_file_out.write_Composition(file_path, composition, bpm)
                 messagebox.showinfo("Export MIDI", f"MIDI file exported successfully to {file_path}")
                 self.status_var.set(f"MIDI export successful: {file_path}")
+                logger.info(f"MIDI file exported successfully to {file_path}")
             except Exception as e:
+                logger.exception("Export error")
                 messagebox.showerror("Export Error", str(e))
                 self.status_var.set("Error: " + str(e))
 
