@@ -1,5 +1,5 @@
 import sys
-import logging  # {{ edit_1: import logging }}
+import logging
 from argparse import ArgumentParser, Namespace
 
 from mingus.core import scales
@@ -23,7 +23,6 @@ def validate_arguments(root_note: str, bpm: int, progression_pattern: list):
     from mingus.core.notes import note_to_int, NoteFormatError
 
     try:
-        # Validate root note
         note_to_int(root_note.upper())
     except NoteFormatError:
         raise ValueError(f"Invalid root note '{root_note}'. Please enter a valid note (e.g., C, C#, Db, D, etc.).")
@@ -44,7 +43,6 @@ def get_user_input() -> Namespace:
 
     args = parser.parse_args()
 
-    # Prompt for missing arguments with defaults
     if not args.root_note:
         args.root_note = input('Enter root note (e.g., C, D#, F) [default: C]: ').strip() or 'C'
     if not args.bpm:
@@ -59,42 +57,38 @@ def main():
     """
     Main execution function.
     """
-    # Initialize logging  # {{ edit_2: added logging configuration }}
     logging.basicConfig(
-        level=logging.DEBUG,  # Capture all levels of logs
+        level=logging.DEBUG,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         handlers=[
             logging.FileHandler("application.log"),
             logging.StreamHandler(sys.stdout)
         ]
     )
-    logger = logging.getLogger(__name__)  # {{ edit_3: get logger }}
+    logger = logging.getLogger(__name__)
     
-    logger.info("Starting the Musical Pattern Generator.")  # {{ edit_4: log info }}
+    logger.info("Starting the Musical Pattern Generator.")
     
     args = get_user_input()
     
     try:
         validate_arguments(root_note=args.root_note, bpm=args.bpm, progression_pattern=args.progression_pattern)
         logger.info("Validated arguments: Root Note=%s, BPM=%d, Progression=%s", 
-                    args.root_note, args.bpm, args.progression_pattern)  # {{ edit_5: log info }}
+                    args.root_note, args.bpm, args.progression_pattern)
     except ValueError as e:
-        logger.error("Input validation error: %s", e)  # {{ edit_6: log error }}
+        logger.error("Input validation error: %s", e)
         print(f"Input validation error: {e}")
         sys.exit(1)
     
-    # Initialize FluidSynth
     if not initialize_fluidsynth():
-        logger.warning("FluidSynth initialization failed. Audio playback will be disabled.")  # {{ edit_7: log warning }}
+        logger.warning("FluidSynth initialization failed. Audio playback will be disabled.")
         audio_available = False
     else:
         audio_available = True
 
-    # Initialize Scale and Graph
     main_scale = Scale(name=f"{args.root_note}_major", mingus_scale_cls=scales.Major, root_note=args.root_note)
     chord_progression = [ChordEvent(symbol=symbol, type='maj7', degrees=[]) for symbol in args.progression_pattern]
 
-    # Define rhythms and motifs (could be expanded or loaded from configurations)
     rhythms = [
         RhythmicPattern(pattern='quarter', tempo=args.bpm, accent='strong'),
         RhythmicPattern(pattern='eighth', tempo=args.bpm, accent='weak'),
@@ -105,14 +99,12 @@ def main():
         Motif(name='motif2', contour='descending', length=4),
     ]
 
-    # Build integrated graph
     integrated_graph_builder = IntegratedMusicGraph()
-    # Prepare scale_notes as List[NoteEvent]
     scale_notes = []
     for note in main_scale.generate_notes():
         note_event = NoteEvent(
-            note=note + '4',  # Assigning octave 4 for simplicity
-            time=0.0,          # Time will be managed in the graph builders
+            note=note + '4',
+            time=0.0,
             chord='',
             beat_type='neutral',
             consonance='consonant'
@@ -127,22 +119,21 @@ def main():
     )
     integrated_graph = integrated_graph_builder.get_integrated_graph()
 
-    # Generate Melody
     melody_gen = MelodyGenerator(integrated_graph)
     try:
-        logger.info("Generating melody using Dijkstra's algorithm.")  # {{ edit_8: log info }}
+        logger.info("Generating melody using Dijkstra's algorithm.")
         melody = melody_gen.generate_melody_dijkstra()
-        logger.debug("Generated Melody: %s", melody)  # {{ edit_9: log debug }}
+        logger.debug("Generated Melody: %s", melody)
         print(f"Generated Melody: {melody}")
         
         if audio_available:
-            logger.info("Playing melody through MIDI.")  # {{ edit_10: log info }}
+            logger.info("Playing melody through MIDI.")
             play_note_sequence(melody, bpm=args.bpm)
     except Exception as e:
-        logger.exception("Error generating or playing melody.")  # {{ edit_11: log exception }}
+        logger.exception("Error generating or playing melody.")
         print(f"Error generating or playing melody: {e}")
     
-    logger.info("Musical Pattern Generator finished successfully.")  # {{ edit_12: log info }}
+    logger.info("Musical Pattern Generator finished successfully.")
     
 if __name__ == "__main__":
     main()
