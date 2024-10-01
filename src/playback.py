@@ -2,13 +2,17 @@ import asyncio
 import os
 import time
 import platform
+import logging
 from typing import List
 
 from mingus.containers import Note
 from mingus.midi import fluidsynth
 from scales import Scale
 
-def initialize_fluidsynth(soundfont_path: str = './soundfonts/yamaha-c7-grand-piano.sf2') -> bool:
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+def initialize_fluidsynth(soundfont_path: str = './soundfonts/Yamaha-C7-Grand-Piano.sf2') -> bool:
     """
     Initializes FluidSynth with the specified soundfont.
 
@@ -16,9 +20,9 @@ def initialize_fluidsynth(soundfont_path: str = './soundfonts/yamaha-c7-grand-pi
     :return: True if initialization is successful, False otherwise.
     """
     try:
-        print("Initializing FluidSynth...")
+        logger.info("Initializing FluidSynth...")
         if not os.path.exists(soundfont_path):
-            print(f"Error: Soundfont file not found at {soundfont_path}")
+            logger.error(f"Soundfont file not found at {soundfont_path}")
             return False
 
         os_name = platform.system()
@@ -30,11 +34,11 @@ def initialize_fluidsynth(soundfont_path: str = './soundfonts/yamaha-c7-grand-pi
             audio_driver = 'alsa'  # Default to ALSA for Linux
 
         fluidsynth.init(soundfont_path, audio_driver)
-        fluidsynth.set_instrument(1, 1)  # Channel 1, program 1 (e.g., Acoustic Grand Piano)
-        print("FluidSynth initialized successfully.")
+        fluidsynth.set_instrument(0, 1)  # Channel 0, program 1 (Acoustic Grand Piano)
+        logger.info("FluidSynth initialized successfully.")
         return True
     except Exception as e:
-        print(f"Error initializing FluidSynth: {str(e)}")
+        logger.error(f"Error initializing FluidSynth: {str(e)}")
         return False
 
 def play_note_sequence(notes: List[str], bpm: int = 120, channel: int = 0) -> None:
@@ -48,14 +52,14 @@ def play_note_sequence(notes: List[str], bpm: int = 120, channel: int = 0) -> No
     duration = 60 / bpm  # Duration of a quarter note in seconds
     for note in notes:
         try:
-            print(f"Playing note: {note}")
+            logger.info(f"Playing note: {note}")
             n = Note(note)
             n.velocity = 100
             fluidsynth.play_Note(n, channel)
             time.sleep(duration)
             fluidsynth.stop_Note(n, channel)
         except Exception as e:
-            print(f"Error playing note {note}: {e}")
+            logger.error(f"Error playing note {note}: {e}")
 
 def play_melody_async(melody: List[str], bpm: int = 120, channel: int = 0) -> None:
     """
@@ -69,52 +73,57 @@ def play_melody_async(melody: List[str], bpm: int = 120, channel: int = 0) -> No
         duration = 60 / bpm
         for note in melody:
             try:
+                logger.info(f"Playing note asynchronously: {note}")
                 n = Note(note)
                 n.velocity = 100
-                fluidsynth.play_NoteAsync(n, channel)
+                fluidsynth.play_Note(n, channel)
                 await asyncio.sleep(duration)
-                fluidsynth.stop_NoteAsync(n, channel)
+                fluidsynth.stop_Note(n, channel)
             except Exception as e:
-                print(f"Error playing note {note}: {e}")
+                logger.error(f"Error playing note {note}: {e}")
     asyncio.run(_play())
 
-def play_scale(scale: Scale, bpm: int) -> None:
+def play_scale(scale: Scale, bpm: int, channel: int = 0) -> None:
     """
     Plays a given scale at the specified BPM.
 
     :param scale: Scale instance to play.
     :param bpm: Tempo in beats per minute.
+    :param channel: MIDI channel to play notes on.
     """
     duration = 60 / bpm  # Duration of a quarter note in seconds
     for note in scale.notes:
         try:
+            logger.info(f"Playing scale note: {note}")
             n = Note(note)
             n.velocity = 100
-            fluidsynth.play_Note(n, 0)  # Channel 0
+            fluidsynth.play_Note(n, channel)
             time.sleep(duration)
-            fluidsynth.stop_Note(n, 0)
+            fluidsynth.stop_Note(n, channel)
         except Exception as e:
-            print(f"Error playing note {note}: {e}")
+            logger.error(f"Error playing note {note}: {e}")
 
-def play_progression(progression: List[List[str]], bpm: int) -> None:
+def play_progression(progression: List[List[str]], bpm: int, channel: int = 0) -> None:
     """
     Plays a chord progression at the specified BPM.
 
     :param progression: List of chords, each chord is a list of note names.
     :param bpm: Tempo in beats per minute.
+    :param channel: MIDI channel to play chords on.
     """
     duration = 60 / bpm  # Duration per chord in seconds
     for chord in progression:
         try:
+            logger.info(f"Playing chord progression: {chord}")
             # Play all notes in the chord
             for note in chord:
                 n = Note(note)
                 n.velocity = 100
-                fluidsynth.play_Note(n, 0)  # Channel 0
+                fluidsynth.play_Note(n, channel)
             time.sleep(duration)
             # Stop all notes in the chord
             for note in chord:
                 n = Note(note)
-                fluidsynth.stop_Note(n, 0)
+                fluidsynth.stop_Note(n, channel)
         except Exception as e:
-            print(f"Error playing chord {chord}: {e}")
+            logger.error(f"Error playing chord {chord}: {e}")
