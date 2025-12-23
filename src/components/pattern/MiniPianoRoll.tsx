@@ -81,6 +81,27 @@ export function MiniPianoRoll({
       style={{ height }}
       preserveAspectRatio="none"
     >
+      {isPlaying && currentNoteIndex !== undefined && noteElements[currentNoteIndex] && (
+        <line
+          x1={noteElements[currentNoteIndex].x}
+          y1={0}
+          x2={noteElements[currentNoteIndex].x}
+          y2={height}
+          stroke="url(#playhead-gradient)"
+          strokeWidth={1}
+          className="opacity-60"
+        />
+      )}
+
+      <defs>
+        <linearGradient id="playhead-gradient" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="transparent" />
+          <stop offset="30%" stopColor="#22c55e" />
+          <stop offset="70%" stopColor="#22c55e" />
+          <stop offset="100%" stopColor="transparent" />
+        </linearGradient>
+      </defs>
+
       <path
         d={pathD}
         fill="none"
@@ -88,31 +109,40 @@ export function MiniPianoRoll({
         strokeWidth={1.5}
         strokeLinecap="round"
         strokeLinejoin="round"
-        className={`text-zinc-600 ${isPlaying ? "text-amber-500/50" : ""}`}
+        className={`text-zinc-600 ${isPlaying ? "text-green-500/30" : ""}`}
       />
 
-      {noteElements.map((note) => (
-        <circle
-          key={note.index}
-          cx={note.x}
-          cy={note.y}
-          r={note.isActive ? noteRadius + 1.5 : noteRadius}
-          className={`transition-micro ${
-            note.isActive
-              ? "fill-green-400"
-              : note.isRoot
-                ? "fill-amber-400"
-                : "fill-zinc-400"
-          }`}
-        />
-      ))}
+      {noteElements.map((note) => {
+        const isPast = currentNoteIndex !== undefined && note.index < currentNoteIndex;
+        const isUpcoming = currentNoteIndex !== undefined && note.index > currentNoteIndex;
+
+        return (
+          <circle
+            key={note.index}
+            cx={note.x}
+            cy={note.y}
+            r={note.isActive ? noteRadius + 2 : noteRadius}
+            className={`transition-all duration-150 ${
+              note.isActive
+                ? "fill-green-400 drop-shadow-[0_0_6px_rgba(34,197,94,0.8)]"
+                : isPast
+                  ? "fill-green-500/40"
+                  : isUpcoming && isPlaying
+                    ? "fill-zinc-500"
+                    : note.isRoot
+                      ? "fill-amber-400"
+                      : "fill-zinc-400"
+            }`}
+          />
+        );
+      })}
 
       {isPlaying && currentNoteIndex !== undefined && noteElements[currentNoteIndex] && (
         <circle
           cx={noteElements[currentNoteIndex].x}
           cy={noteElements[currentNoteIndex].y}
-          r={noteRadius + 4}
-          className="fill-none stroke-green-400/40 animate-pulse-ring"
+          r={noteRadius + 5}
+          className="fill-none stroke-green-400/30 animate-pulse-ring"
           strokeWidth={2}
         />
       )}

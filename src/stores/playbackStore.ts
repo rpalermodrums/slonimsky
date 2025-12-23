@@ -14,6 +14,7 @@ interface PracticeMode {
 
 interface PlaybackStore {
   isPlaying: boolean;
+  isPreviewing: boolean;
   isInitialized: boolean;
   tempo: number;
   rootNote: number;
@@ -25,6 +26,8 @@ interface PlaybackStore {
 
   initialize: () => Promise<void>;
   play: (pattern: SlonimskyPattern) => void;
+  preview: (pattern: SlonimskyPattern) => void;
+  stopPreview: () => void;
   stop: () => void;
   setTempo: (bpm: number) => void;
   setRootNote: (midi: number) => void;
@@ -36,6 +39,7 @@ interface PlaybackStore {
 
 export const usePlaybackStore = create<PlaybackStore>((set, get) => ({
   isPlaying: false,
+  isPreviewing: false,
   isInitialized: false,
   tempo: 120,
   rootNote: 60,
@@ -75,12 +79,37 @@ export const usePlaybackStore = create<PlaybackStore>((set, get) => ({
 
     audioEngine.schedulePattern(events, loop);
     audioEngine.play();
-    set({ isPlaying: true });
+    set({ isPlaying: true, isPreviewing: false });
+  },
+
+  preview: (pattern) => {
+    const { rootNote, isPlaying } = get();
+    if (isPlaying) return;
+
+    const events = patternToNoteEvents(pattern, {
+      rootMidi: rootNote,
+      octaves: 1,
+      noteDuration: 0.25,
+      velocity: 80,
+    });
+
+    audioEngine.setTempo(180);
+    audioEngine.preview(events, 5);
+    set({ isPreviewing: true });
+  },
+
+  stopPreview: () => {
+    const { isPlaying, isPreviewing, tempo } = get();
+    if (isPreviewing && !isPlaying) {
+      audioEngine.stop();
+      audioEngine.setTempo(tempo);
+      set({ isPreviewing: false, currentNote: null, currentNoteIndex: null });
+    }
   },
 
   stop: () => {
     audioEngine.stop();
-    set({ isPlaying: false, currentNote: null, currentNoteIndex: null });
+    set({ isPlaying: false, isPreviewing: false, currentNote: null, currentNoteIndex: null });
   },
 
   setTempo: (bpm) => {

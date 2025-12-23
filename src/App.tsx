@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useCallback } from "react";
 import { Search, Music, LayoutGrid, GitBranch, BarChart3 } from "lucide-react";
 import { PatternCard } from "@/components/pattern/PatternCard";
 import { PatternModal } from "@/components/pattern/PatternModal";
@@ -33,7 +33,7 @@ function App() {
   const [modalPattern, setModalPattern] = useState<SlonimskyPattern | null>(null);
   const [isPianoExpanded, setIsPianoExpanded] = useState(false);
 
-  useKeyboardShortcuts();
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const patternNotes = useMemo(() => {
     if (!selectedPattern) return [];
@@ -63,6 +63,16 @@ function App() {
     });
   }, [catalog, search, categoryFilter]);
 
+  const handleFocusSearch = useCallback(() => {
+    searchInputRef.current?.focus();
+  }, []);
+
+  useKeyboardShortcuts({
+    patterns: filteredPatterns,
+    gridColumns: 3,
+    onFocusSearch: handleFocusSearch,
+  });
+
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col">
       <header className="sticky top-0 z-20 bg-zinc-950/80 backdrop-blur-lg border-b border-zinc-800">
@@ -82,11 +92,12 @@ function App() {
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
                 <input
+                  ref={searchInputRef}
                   type="text"
-                  placeholder="Search patterns..."
+                  placeholder="Search patterns... (press /)"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-sm placeholder:text-zinc-600 focus:outline-none focus:border-zinc-700"
+                  className="w-full pl-10 pr-4 py-2 bg-zinc-900 border border-zinc-800 rounded-lg text-sm placeholder:text-zinc-600 focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20"
                 />
               </div>
             </div>

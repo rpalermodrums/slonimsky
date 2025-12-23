@@ -1,12 +1,15 @@
-import { Play, Pause, Info } from "lucide-react";
+import { useRef, useCallback, useState } from "react";
+import { Play, Pause, ChevronDown, ChevronUp, Download } from "lucide-react";
 import type { SlonimskyPattern } from "@/core/types";
 import { usePatternStore } from "@/stores/patternStore";
 import { usePlaybackStore } from "@/stores/playbackStore";
 import { MiniPianoRoll } from "./MiniPianoRoll";
+import { PatternVisualization } from "./PatternVisualization";
 
 interface PatternCardProps {
   pattern: SlonimskyPattern;
   onOpenModal?: (pattern: SlonimskyPattern) => void;
+  onExport?: (pattern: SlonimskyPattern) => void;
 }
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -33,16 +36,60 @@ function formatCategory(category: string): string {
     .join(" ");
 }
 
-export function PatternCard({ pattern, onOpenModal }: PatternCardProps) {
+export function PatternCard({ pattern, onOpenModal, onExport }: PatternCardProps) {
   const { selectedPattern, selectPattern } = usePatternStore();
-  const { isPlaying, play, stop, isInitialized, initialize, currentNoteIndex } =
-    usePlaybackStore();
+  const {
+    isPlaying,
+    isPreviewing,
+    play,
+    stop,
+    preview,
+    stopPreview,
+    isInitialized,
+    initialize,
+    currentNoteIndex,
+    rootNote,
+  } = usePlaybackStore();
+
+  const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [isExpanded, setIsExpanded] = useState(false);
 
   const isSelected = selectedPattern?.id === pattern.id;
   const isCurrentlyPlaying = isSelected && isPlaying;
 
+  const handleMouseEnter = useCallback(async () => {
+    if (isPlaying) return;
+
+    hoverTimeoutRef.current = setTimeout(async () => {
+      if (!isInitialized) {
+        await initialize();
+      }
+      preview(pattern);
+    }, 400);
+  }, [isPlaying, isInitialized, initialize, preview, pattern]);
+
+  const handleMouseLeave = useCallback(() => {
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current);
+      hoverTimeoutRef.current = null;
+    }
+    if (isPreviewing) {
+      stopPreview();
+    }
+  }, [isPreviewing, stopPreview]);
+
   const handleClick = () => {
+    if (isSelected) {
+      setIsExpanded(!isExpanded);
+    } else {
+      selectPattern(pattern);
+    }
+  };
+
+  const handleToggleExpand = (e: React.MouseEvent) => {
+    e.stopPropagation();
     selectPattern(pattern);
+    setIsExpanded(!isExpanded);
   };
 
   const handlePlay = async (e: React.MouseEvent) => {
@@ -66,11 +113,13 @@ export function PatternCard({ pattern, onOpenModal }: PatternCardProps) {
   return (
     <div
       onClick={handleClick}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
       className={`group relative rounded-xl border border-l-[3px] transition-standard cursor-pointer overflow-hidden ${accentClass} ${
         isSelected
           ? "bg-zinc-800/80 border-amber-500/30 ring-1 ring-amber-500/20"
           : "bg-zinc-900/50 border-zinc-800 hover:border-zinc-700 hover:bg-zinc-800/50"
-      }`}
+      } ${isPreviewing ? "ring-1 ring-amber-500/30" : ""}`}
     >
       <div className="p-3 bg-zinc-900/30">
         <MiniPianoRoll
@@ -89,18 +138,21 @@ export function PatternCard({ pattern, onOpenModal }: PatternCardProps) {
           </div>
 
           <div className="flex gap-1.5">
-            {onOpenModal && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onOpenModal(pattern);
-                }}
-                className="shrink-0 w-9 h-9 rounded-lg flex items-center justify-center transition-micro bg-zinc-800 text-zinc-400 opacity-0 group-hover:opacity-100 hover:bg-zinc-700 hover:text-zinc-200"
-                title="View details"
-              >
-                <Info className="w-4 h-4" />
-              </button>
-            )}
+            <button
+              onClick={handleToggleExpand}
+              className={`shrink-0 w-9 h-9 rounded-lg flex items-center justify-center transition-micro ${
+                isExpanded
+                  ? "bg-amber-500/20 text-amber-400"
+                  : "bg-zinc-800 text-zinc-400 opacity-0 group-hover:opacity-100 hover:bg-zinc-700 hover:text-zinc-200"
+              }`}
+              title={isExpanded ? "Collapse" : "Expand details"}
+            >
+              {isExpanded ? (
+                <ChevronUp className="w-4 h-4" />
+              ) : (
+                <ChevronDown className="w-4 h-4" />
+              )}
+            </button>
             <button
               onClick={handlePlay}
               className={`shrink-0 w-9 h-9 rounded-lg flex items-center justify-center transition-micro ${
@@ -134,6 +186,54 @@ export function PatternCard({ pattern, onOpenModal }: PatternCardProps) {
               Ultra {pattern.ultrapolation.type}
             </span>
           )}
+        </div>
+      </div>
+
+      <div
+        className={`overflow-hidden transition-all duration-300 ease-out ${
+          isExpanded ? "max-h-[300px] opacity-100" : "max-h-0 opacity-0"
+        }`}
+      >
+        <div className="p-4 pt-0 border-t border-zinc-800/50">
+          <PatternVisualization
+            pattern={pattern}
+            rootNote={rootNote}
+            currentNoteIndex={isCurrentlyPlaying ? (currentNoteIndex ?? undefined) : undefined}
+            height={160}
+          />
+
+          <div className="mt-3 flex items-center justify-between">
+            <div className="text-xs text-zinc-500">
+              <span className="text-zinc-400">{pattern.intervals.length}</span> intervals •{" "}
+              <span className="text-zinc-400">{pattern.pitchClasses.length}</span> pitch classes
+            </div>
+
+            <div className="flex gap-2">
+              {onExport && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onExport(pattern);
+                  }}
+                  className="px-3 py-1.5 text-xs rounded-lg bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200 transition-micro flex items-center gap-1.5"
+                >
+                  <Download className="w-3 h-3" />
+                  Export MIDI
+                </button>
+              )}
+              {onOpenModal && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onOpenModal(pattern);
+                  }}
+                  className="px-3 py-1.5 text-xs rounded-lg bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200 transition-micro"
+                >
+                  Full Details
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 

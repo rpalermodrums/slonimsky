@@ -1,17 +1,44 @@
-import { useEffect } from "react";
+import { useEffect, useCallback } from "react";
 import { usePlaybackStore } from "@/stores/playbackStore";
 import { usePatternStore } from "@/stores/patternStore";
+import type { SlonimskyPattern } from "@/core/types";
 
-export function useKeyboardShortcuts() {
-  const { isPlaying, tempo, setTempo, stop } = usePlaybackStore();
-  const { selectedPattern, selectPattern, catalog } = usePatternStore();
+interface KeyboardShortcutsOptions {
+  patterns: SlonimskyPattern[];
+  gridColumns?: number;
+  onFocusSearch?: () => void;
+}
+
+export function useKeyboardShortcuts({
+  patterns,
+  gridColumns = 3,
+  onFocusSearch,
+}: KeyboardShortcutsOptions) {
+  const { isPlaying, tempo, setTempo, stop, isInitialized, initialize } = usePlaybackStore();
+  const { selectedPattern, selectPattern } = usePatternStore();
   const play = usePlaybackStore((s) => s.play);
 
-  useEffect(() => {
-    function handleKeyDown(e: KeyboardEvent) {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+  const handleKeyDown = useCallback(
+    async (e: KeyboardEvent) => {
+      const isInInput =
+        e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
+
+      if (e.key === "/" && !isInInput) {
+        e.preventDefault();
+        onFocusSearch?.();
         return;
       }
+
+      if (e.key === "Escape") {
+        if (isInInput) {
+          (e.target as HTMLElement).blur();
+        } else if (isPlaying) {
+          stop();
+        }
+        return;
+      }
+
+      if (isInInput) return;
 
       switch (e.code) {
         case "Space":
@@ -19,40 +46,83 @@ export function useKeyboardShortcuts() {
           if (isPlaying) {
             stop();
           } else if (selectedPattern) {
+            if (!isInitialized) await initialize();
             play(selectedPattern);
           }
           break;
 
         case "ArrowUp":
+        case "ArrowDown":
+        case "ArrowLeft":
+        case "ArrowRight": {
           e.preventDefault();
-          setTempo(Math.min(200, tempo + 5));
+          if (patterns.length === 0) break;
+
+          const currentIndex = selectedPattern
+            ? patterns.findIndex((p) => p.id === selectedPattern.id)
+            : -1;
+
+          let newIndex = currentIndex;
+
+          if (e.code === "ArrowRight") {
+            newIndex = currentIndex < patterns.length - 1 ? currentIndex + 1 : 0;
+          } else if (e.code === "ArrowLeft") {
+            newIndex = currentIndex > 0 ? currentIndex - 1 : patterns.length - 1;
+          } else if (e.code === "ArrowDown") {
+            newIndex = currentIndex + gridColumns;
+            if (newIndex >= patterns.length) newIndex = currentIndex % gridColumns;
+          } else if (e.code === "ArrowUp") {
+            newIndex = currentIndex - gridColumns;
+            if (newIndex < 0) {
+              const lastRowStart =
+                Math.floor((patterns.length - 1) / gridColumns) * gridColumns;
+              newIndex = Math.min(lastRowStart + (currentIndex % gridColumns), patterns.length - 1);
+            }
+          }
+
+          if (newIndex >= 0 && newIndex < patterns.length) {
+            selectPattern(patterns[newIndex]);
+          }
+          break;
+        }
+
+        case "BracketRight":
+          e.preventDefault();
+          setTempo(Math.min(240, tempo + 5));
           break;
 
-        case "ArrowDown":
+        case "BracketLeft":
           e.preventDefault();
           setTempo(Math.max(40, tempo - 5));
           break;
 
-        case "ArrowLeft":
-        case "ArrowRight": {
+        case "Enter":
           e.preventDefault();
-          if (!selectedPattern || catalog.length === 0) break;
-          const currentIndex = catalog.findIndex((p) => p.id === selectedPattern.id);
-          const direction = e.code === "ArrowRight" ? 1 : -1;
-          const newIndex = (currentIndex + direction + catalog.length) % catalog.length;
-          selectPattern(catalog[newIndex]);
-          break;
-        }
-
-        case "Escape":
-          if (isPlaying) {
-            stop();
+          if (selectedPattern) {
+            if (!isInitialized) await initialize();
+            play(selectedPattern);
           }
           break;
       }
-    }
+    },
+    [
+      isPlaying,
+      selectedPattern,
+      patterns,
+      gridColumns,
+      tempo,
+      setTempo,
+      stop,
+      play,
+      selectPattern,
+      onFocusSearch,
+      isInitialized,
+      initialize,
+    ]
+  );
 
+  useEffect(() => {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isPlaying, selectedPattern, tempo, setTempo, stop, play, selectPattern, catalog]);
+  }, [handleKeyDown]);
 }

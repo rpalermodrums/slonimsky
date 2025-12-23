@@ -130,6 +130,47 @@ class AudioEngine {
     this.scheduledEvents = [];
   }
 
+  preview(events: NoteEvent[], maxNotes = 4): void {
+    if (!this.synth) return;
+
+    this.stop();
+    this.clearScheduledEvents();
+
+    const previewEvents = events.slice(0, maxNotes);
+    const transport = Tone.getTransport();
+    transport.loop = false;
+
+    for (let i = 0; i < previewEvents.length; i++) {
+      const event = previewEvents[i];
+      const noteIndex = i;
+      const id = transport.schedule((time) => {
+        const noteName = Tone.Frequency(event.pitch, "midi").toNote();
+        const durationSeconds = Tone.Time(`${event.duration}:0:0`).toSeconds();
+        this.synth?.triggerAttackRelease(
+          noteName,
+          durationSeconds * 0.8,
+          time,
+          event.velocity / 127
+        );
+        Tone.getDraw().schedule(() => {
+          this.emitNoteChange({ midi: event.pitch, index: noteIndex });
+        }, time);
+      }, `${event.time}:0:0`);
+      this.scheduledEvents.push(id);
+    }
+
+    const lastEvent = previewEvents[previewEvents.length - 1];
+    const endTime = lastEvent.time + lastEvent.duration;
+    transport.schedule(() => {
+      this.stop();
+      this.emitNoteChange({ midi: null, index: null });
+    }, `${endTime}:0:0`);
+
+    transport.position = 0;
+    transport.start();
+    this._state = "playing";
+  }
+
   dispose(): void {
     this.stop();
     this.clearScheduledEvents();
