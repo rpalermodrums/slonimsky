@@ -33,6 +33,10 @@ export {
   DEFAULT_USER_SETTINGS,
 } from "./types";
 
+// Graph
+export { buildMelodicGraph, getEdgesByNode, getPatternsByEdge } from "./graph";
+export type { GraphNode, GraphEdge } from "./graph";
+
 // Pattern generation
 export {
   generatePatternId,

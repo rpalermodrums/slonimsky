@@ -1,10 +1,11 @@
-import { Play } from "lucide-react";
+import { Play, Info } from "lucide-react";
 import type { SlonimskyPattern } from "@/core/types";
 import { usePatternStore } from "@/stores/patternStore";
 import { usePlaybackStore } from "@/stores/playbackStore";
 
 interface PatternCardProps {
   pattern: SlonimskyPattern;
+  onOpenModal?: (pattern: SlonimskyPattern) => void;
 }
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -23,7 +24,7 @@ function formatCategory(category: string): string {
     .join(" ");
 }
 
-export function PatternCard({ pattern }: PatternCardProps) {
+export function PatternCard({ pattern, onOpenModal }: PatternCardProps) {
   const { selectedPattern, selectPattern } = usePatternStore();
   const { isPlaying, play, stop, isInitialized, initialize } = usePlaybackStore();
 
@@ -66,16 +67,30 @@ export function PatternCard({ pattern }: PatternCardProps) {
           <p className="text-sm text-zinc-500 mt-1">ID: {pattern.id}</p>
         </div>
 
-        <button
-          onClick={handlePlay}
-          className={`shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all ${
-            isCurrentlyPlaying
-              ? "bg-emerald-500 text-white"
-              : "bg-zinc-700 text-zinc-300 opacity-0 group-hover:opacity-100 hover:bg-emerald-600 hover:text-white"
-          }`}
-        >
-          <Play className={`w-4 h-4 ${isCurrentlyPlaying ? "" : "ml-0.5"}`} />
-        </button>
+        <div className="flex gap-1">
+          {onOpenModal && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenModal(pattern);
+              }}
+              className="shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all bg-zinc-700 text-zinc-300 opacity-0 group-hover:opacity-100 hover:bg-zinc-600 hover:text-white"
+              title="View details"
+            >
+              <Info className="w-4 h-4" />
+            </button>
+          )}
+          <button
+            onClick={handlePlay}
+            className={`shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-all ${
+              isCurrentlyPlaying
+                ? "bg-emerald-500 text-white"
+                : "bg-zinc-700 text-zinc-300 opacity-0 group-hover:opacity-100 hover:bg-emerald-600 hover:text-white"
+            }`}
+          >
+            <Play className={`w-4 h-4 ${isCurrentlyPlaying ? "" : "ml-0.5"}`} />
+          </button>
+        </div>
       </div>
 
       <div className="mt-3 flex flex-wrap gap-2">
