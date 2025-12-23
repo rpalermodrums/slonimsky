@@ -20,6 +20,7 @@ interface PlaybackStore {
   octaves: number;
   loop: boolean;
   currentNote: number | null;
+  currentNoteIndex: number | null;
   practiceMode: PracticeMode;
 
   initialize: () => Promise<void>;
@@ -41,6 +42,7 @@ export const usePlaybackStore = create<PlaybackStore>((set, get) => ({
   octaves: 1,
   loop: true,
   currentNote: null,
+  currentNoteIndex: null,
   practiceMode: {
     enabled: false,
     startTempo: 60,
@@ -53,7 +55,9 @@ export const usePlaybackStore = create<PlaybackStore>((set, get) => ({
   initialize: async () => {
     await audioEngine.initialize();
     audioEngine.setTempo(get().tempo);
-    audioEngine.onNoteChange((note) => set({ currentNote: note }));
+    audioEngine.onNoteChange((event) =>
+      set({ currentNote: event.midi, currentNoteIndex: event.index })
+    );
     set({ isInitialized: true });
   },
 
@@ -76,7 +80,7 @@ export const usePlaybackStore = create<PlaybackStore>((set, get) => ({
 
   stop: () => {
     audioEngine.stop();
-    set({ isPlaying: false, currentNote: null });
+    set({ isPlaying: false, currentNote: null, currentNoteIndex: null });
   },
 
   setTempo: (bpm) => {

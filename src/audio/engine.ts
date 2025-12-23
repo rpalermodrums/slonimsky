@@ -2,7 +2,13 @@ import * as Tone from "tone";
 import type { NoteEvent } from "@/core/types";
 
 type AudioEngineState = "stopped" | "playing" | "paused";
-type NoteCallback = (midi: number | null) => void;
+
+interface NoteChangeEvent {
+  midi: number | null;
+  index: number | null;
+}
+
+type NoteCallback = (event: NoteChangeEvent) => void;
 
 class AudioEngine {
   private synth: Tone.PolySynth | null = null;
@@ -62,7 +68,9 @@ class AudioEngine {
       transport.loop = false;
     }
 
-    for (const event of events) {
+    for (let i = 0; i < events.length; i++) {
+      const event = events[i];
+      const noteIndex = i;
       const id = transport.schedule((time) => {
         const noteName = Tone.Frequency(event.pitch, "midi").toNote();
         const durationSeconds = Tone.Time(`${event.duration}:0:0`).toSeconds();
@@ -73,10 +81,10 @@ class AudioEngine {
           event.velocity / 127
         );
         Tone.getDraw().schedule(() => {
-          this.emitNoteChange(event.pitch);
+          this.emitNoteChange({ midi: event.pitch, index: noteIndex });
         }, time);
         Tone.getDraw().schedule(() => {
-          this.emitNoteChange(null);
+          this.emitNoteChange({ midi: null, index: null });
         }, time + durationSeconds * 0.9);
       }, `${event.time}:0:0`);
 
@@ -136,9 +144,9 @@ class AudioEngine {
     return () => this.noteCallbacks.delete(callback);
   }
 
-  private emitNoteChange(midi: number | null): void {
+  private emitNoteChange(event: NoteChangeEvent): void {
     for (const cb of this.noteCallbacks) {
-      cb(midi);
+      cb(event);
     }
   }
 }

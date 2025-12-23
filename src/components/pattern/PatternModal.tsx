@@ -27,7 +27,7 @@ export function PatternModal({ pattern, onClose }: PatternModalProps) {
 
   const handleExportMidi = () => {
     const midiData = generateMidiFile(pattern, rootNote);
-    const blob = new Blob([midiData], { type: "audio/midi" });
+    const blob = new Blob([new Uint8Array(midiData)], { type: "audio/midi" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;

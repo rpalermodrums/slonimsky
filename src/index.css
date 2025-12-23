@@ -1,30 +1,70 @@
 @import 'tailwindcss';
 
 @theme {
-  --font-sans: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+  /* Typography */
+  --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
     'Helvetica Neue', Arial, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', Consolas, monospace;
 
-  --color-background: #0a0a0a;
+  /* Background layers */
+  --color-background: #09090b;
+  --color-background-raised: #18181b;
+  --color-background-elevated: #27272a;
   --color-foreground: #fafafa;
   --color-muted: #a1a1aa;
   --color-muted-foreground: #71717a;
   --color-border: #27272a;
+  --color-border-subtle: #3f3f46;
   --color-input: #27272a;
-  --color-ring: #3b82f6;
-  --color-primary: #3b82f6;
-  --color-primary-foreground: #fafafa;
+  --color-ring: #f59e0b;
+
+  /* Accent - warm amber */
+  --color-primary: #f59e0b;
+  --color-primary-muted: #78350f;
+  --color-primary-foreground: #0a0a0a;
   --color-secondary: #27272a;
   --color-secondary-foreground: #fafafa;
-  --color-accent: #27272a;
-  --color-accent-foreground: #fafafa;
+  --color-accent: #f59e0b;
+  --color-accent-foreground: #0a0a0a;
   --color-destructive: #ef4444;
   --color-destructive-foreground: #fafafa;
 
+  /* Semantic - playback states */
+  --color-playing: #22c55e;
+  --color-principal: #a855f7;
+  --color-interpolated: #3b82f6;
+  --color-ultrapolated: #f43f5e;
+
+  /* Category colors */
+  --color-tritone: #a855f7;
+  --color-ditone: #3b82f6;
+  --color-sesquitone: #06b6d4;
+  --color-wholetone: #f59e0b;
+  --color-chromatic: #f43f5e;
+
   /* Piano key colors */
-  --color-key-white: #fafafa;
+  --color-key-white: #f4f4f5;
+  --color-key-white-hover: #e4e4e7;
   --color-key-black: #18181b;
-  --color-key-active: #3b82f6;
-  --color-key-highlight: #60a5fa;
+  --color-key-black-hover: #27272a;
+  --color-key-active: #22c55e;
+  --color-key-highlight: rgba(245, 158, 11, 0.4);
+
+  /* Spacing scale */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  /* Motion */
+  --ease-micro: cubic-bezier(0.25, 0.1, 0.25, 1);
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-expressive: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --duration-micro: 150ms;
+  --duration-standard: 250ms;
+  --duration-expressive: 400ms;
 }
 
 * {
@@ -37,8 +77,119 @@ body {
   font-family: var(--font-sans);
   margin: 0;
   min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 #root {
   min-height: 100vh;
+}
+
+/* Typography classes */
+.text-display {
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.text-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+}
+
+.text-label {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-muted-foreground);
+}
+
+.text-body {
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--color-muted);
+}
+
+.text-mono {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  letter-spacing: -0.01em;
+}
+
+/* Motion utilities */
+.transition-micro {
+  transition-property: color, background-color, border-color, opacity, transform;
+  transition-duration: var(--duration-micro);
+  transition-timing-function: var(--ease-micro);
+}
+
+.transition-standard {
+  transition-property: all;
+  transition-duration: var(--duration-standard);
+  transition-timing-function: var(--ease-standard);
+}
+
+.transition-expressive {
+  transition-property: all;
+  transition-duration: var(--duration-expressive);
+  transition-timing-function: var(--ease-expressive);
+}
+
+/* Playback pulse animation */
+@keyframes pulse-ring {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.8);
+    opacity: 0;
+  }
+}
+
+@keyframes subtle-pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+.animate-pulse-ring {
+  animation: pulse-ring 1s ease-out infinite;
+}
+
+.animate-subtle-pulse {
+  animation: subtle-pulse 1.5s ease-in-out infinite;
+}
+
+/* Piano key press animation */
+@keyframes key-press {
+  0% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(2px);
+  }
+  100% {
+    transform: translateY(0);
+  }
+}
+
+.animate-key-press {
+  animation: key-press 150ms ease-out;
+}
+
+/* Note highlight glow */
+.glow-note {
+  box-shadow: 0 0 12px 2px var(--color-playing);
+}
+
+.glow-highlight {
+  box-shadow: 0 0 8px 1px var(--color-primary);
 }
