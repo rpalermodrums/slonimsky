@@ -193,3 +193,29 @@ body {
 .glow-highlight {
   box-shadow: 0 0 8px 1px var(--color-primary);
 }
+
+@keyframes metronome-beat {
+  0%, 100% {
+    opacity: 0.3;
+    transform: scale(1);
+  }
+  10% {
+    opacity: 1;
+    transform: scale(1.3);
+  }
+  30% {
+    opacity: 0.3;
+    transform: scale(1);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.2;
+  }
+  50% {
+    transform: scale(1.4);
+    opacity: 0;
+  }
+}

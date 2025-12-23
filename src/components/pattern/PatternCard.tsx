@@ -1,5 +1,5 @@
 import { useRef, useCallback, useState } from "react";
-import { Play, Pause, ChevronDown, ChevronUp, Download } from "lucide-react";
+import { Play, Pause, ChevronDown, ChevronUp, Download, CheckCircle2 } from "lucide-react";
 import type { SlonimskyPattern } from "@/core/types";
 import { usePatternStore } from "@/stores/patternStore";
 import { usePlaybackStore } from "@/stores/playbackStore";
@@ -10,6 +10,7 @@ interface PatternCardProps {
   pattern: SlonimskyPattern;
   onOpenModal?: (pattern: SlonimskyPattern) => void;
   onExport?: (pattern: SlonimskyPattern) => void;
+  highlighted?: boolean;
 }
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -36,8 +37,13 @@ function formatCategory(category: string): string {
     .join(" ");
 }
 
-export function PatternCard({ pattern, onOpenModal, onExport }: PatternCardProps) {
-  const { selectedPattern, selectPattern } = usePatternStore();
+export function PatternCard({
+  pattern,
+  onOpenModal,
+  onExport,
+  highlighted = false,
+}: PatternCardProps) {
+  const { selectedPattern, selectPattern, toggleMastered, isMastered } = usePatternStore();
   const {
     isPlaying,
     isPreviewing,
@@ -56,6 +62,12 @@ export function PatternCard({ pattern, onOpenModal, onExport }: PatternCardProps
 
   const isSelected = selectedPattern?.id === pattern.id;
   const isCurrentlyPlaying = isSelected && isPlaying;
+  const patternMastered = isMastered(pattern.id);
+
+  const handleToggleMastered = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    toggleMastered(pattern.id);
+  };
 
   const handleMouseEnter = useCallback(async () => {
     if (isPlaying) return;
@@ -116,9 +128,11 @@ export function PatternCard({ pattern, onOpenModal, onExport }: PatternCardProps
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
       className={`group relative rounded-xl border border-l-[3px] transition-standard cursor-pointer overflow-hidden ${accentClass} ${
-        isSelected
-          ? "bg-zinc-800/80 border-amber-500/30 ring-1 ring-amber-500/20"
-          : "bg-zinc-900/50 border-zinc-800 hover:border-zinc-700 hover:bg-zinc-800/50"
+        highlighted
+          ? "ring-2 ring-amber-500/40 bg-zinc-800/70"
+          : isSelected
+            ? "bg-zinc-800/80 border-amber-500/30 ring-1 ring-amber-500/20"
+            : "bg-zinc-900/50 border-zinc-800 hover:border-zinc-700 hover:bg-zinc-800/50"
       } ${isPreviewing ? "ring-1 ring-amber-500/30" : ""}`}
     >
       <div className="p-3 bg-zinc-900/30">
@@ -138,6 +152,17 @@ export function PatternCard({ pattern, onOpenModal, onExport }: PatternCardProps
           </div>
 
           <div className="flex gap-1.5">
+            <button
+              onClick={handleToggleMastered}
+              className={`shrink-0 w-9 h-9 rounded-lg flex items-center justify-center transition-micro ${
+                patternMastered
+                  ? "bg-green-500/20 text-green-400"
+                  : "bg-zinc-800 text-zinc-400 opacity-0 group-hover:opacity-100 hover:bg-zinc-700 hover:text-zinc-200"
+              }`}
+              title={patternMastered ? "Mastered! Click to unmark" : "Mark as mastered"}
+            >
+              <CheckCircle2 className={`w-4 h-4 ${patternMastered ? "fill-green-500/30" : ""}`} />
+            </button>
             <button
               onClick={handleToggleExpand}
               className={`shrink-0 w-9 h-9 rounded-lg flex items-center justify-center transition-micro ${

@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useCallback } from "react";
 
 interface MiniPianoRollProps {
   intervals: readonly number[];
@@ -34,10 +34,13 @@ export function MiniPianoRoll({
   const padding = 4;
   const noteRadius = 3;
 
-  const getY = (pitch: number) => {
-    const normalized = (pitch - minPitch) / range;
-    return height - padding - normalized * (height - padding * 2);
-  };
+  const getY = useCallback(
+    (pitch: number) => {
+      const normalized = (pitch - minPitch) / range;
+      return height - padding - normalized * (height - padding * 2);
+    },
+    [minPitch, range, height]
+  );
 
   const pathD = useMemo(() => {
     if (notes.length < 2) return "";
@@ -52,7 +55,7 @@ export function MiniPianoRoll({
         return i === 0 ? `M ${x} ${y}` : `L ${x} ${y}`;
       })
       .join(" ");
-  }, [notes, height, minPitch, range]);
+  }, [notes, getY]);
 
   const noteElements = useMemo(() => {
     const width = 100;
@@ -72,7 +75,7 @@ export function MiniPianoRoll({
         index: i,
       };
     });
-  }, [notes, currentNoteIndex, height, minPitch, range]);
+  }, [notes, currentNoteIndex, getY]);
 
   return (
     <svg

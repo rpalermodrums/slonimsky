@@ -14,8 +14,8 @@ export function useKeyboardShortcuts({
   gridColumns = 3,
   onFocusSearch,
 }: KeyboardShortcutsOptions) {
-  const { isPlaying, tempo, setTempo, stop, isInitialized, initialize } = usePlaybackStore();
-  const { selectedPattern, selectPattern } = usePatternStore();
+  const { isPlaying, tempo, setTempo, stop, isInitialized, initialize, toggleDirection } = usePlaybackStore();
+  const { selectedPattern, selectPattern, selectRandomPattern, toggleMastered } = usePatternStore();
   const play = usePlaybackStore((s) => s.play);
 
   const handleKeyDown = useCallback(
@@ -103,6 +103,25 @@ export function useKeyboardShortcuts({
             play(selectedPattern);
           }
           break;
+
+        case "KeyR":
+          if (!e.metaKey && !e.ctrlKey) {
+            e.preventDefault();
+            selectRandomPattern();
+          }
+          break;
+
+        case "KeyM":
+          e.preventDefault();
+          if (selectedPattern) {
+            toggleMastered(selectedPattern.id);
+          }
+          break;
+
+        case "KeyD":
+          e.preventDefault();
+          toggleDirection();
+          break;
       }
     },
     [
@@ -115,6 +134,9 @@ export function useKeyboardShortcuts({
       stop,
       play,
       selectPattern,
+      selectRandomPattern,
+      toggleMastered,
+      toggleDirection,
       onFocusSearch,
       isInitialized,
       initialize,

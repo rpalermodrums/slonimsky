@@ -2,6 +2,8 @@ import { useEffect, useRef, useMemo, useState } from "react";
 import * as d3 from "d3";
 import { buildMelodicGraph } from "@/core";
 import { usePatternStore } from "@/stores/patternStore";
+import { usePlaybackStore } from "@/stores/playbackStore";
+import type { PitchClass } from "@/core/types";
 
 interface D3Node extends d3.SimulationNodeDatum {
   id: number;
@@ -19,7 +21,8 @@ interface D3Link extends d3.SimulationLinkDatum<D3Node> {
 interface GraphViewProps {
   width?: number;
   height?: number;
-  onNodeClick?: (pitchClass: number) => void;
+  onNodeClick?: (pitchClass: PitchClass) => void;
+  onNodeHover?: (pitchClass: PitchClass | null) => void;
   onEdgeClick?: (source: number, target: number, patterns: string[]) => void;
 }
 
@@ -27,11 +30,37 @@ export function GraphView({
   width = 600,
   height = 500,
   onNodeClick,
+  onNodeHover,
   onEdgeClick,
 }: GraphViewProps) {
   const svgRef = useRef<SVGSVGElement>(null);
-  const { catalog } = usePatternStore();
+  const { catalog, selectedPattern } = usePatternStore();
   const [selectedNode, setSelectedNode] = useState<number | null>(null);
+  const { currentNoteIndex } = usePlaybackStore();
+
+  const highlightedPath = useMemo(() => {
+    return selectedPattern?.pitchClasses ?? [];
+  }, [selectedPattern]);
+
+  const highlightedEdges = useMemo(() => {
+    if (highlightedPath.length < 2) return [];
+    const result: { source: number; target: number }[] = [];
+    for (let i = 0; i < highlightedPath.length - 1; i++) {
+      const from = highlightedPath[i];
+      const to = highlightedPath[i + 1];
+      result.push({ source: from, target: to });
+    }
+    return result;
+  }, [highlightedPath]);
+
+  const highlightedPathSet = useMemo(
+    () => new Set(highlightedPath),
+    [highlightedPath]
+  );
+
+  const currentlyHighlightedNode = useMemo(() => {
+    return highlightedPath[(currentNoteIndex ?? 0) % highlightedPath.length] ?? null;
+  }, [highlightedPath, currentNoteIndex]);
 
   const graph = useMemo(() => buildMelodicGraph(catalog), [catalog]);
 
@@ -76,15 +105,36 @@ export function GraphView({
       .force("center", d3.forceCenter(width / 2, height / 2))
       .force("collision", d3.forceCollide().radius(30));
 
-    const maxWeight = Math.max(...links.map((l) => l.weight), 1);
+const maxWeight = Math.max(...links.map((l) => l.weight), 1);
 
     const link = g.append("g")
       .selectAll("line")
       .data(links)
       .join("line")
-      .attr("stroke", "#525252")
-      .attr("stroke-opacity", 0.6)
-      .attr("stroke-width", (d) => Math.max(1, (d.weight / maxWeight) * 4))
+      .attr("stroke", (d) => {
+        const sourceId = typeof d.source === "object" ? d.source.id : d.source;
+        const targetId = typeof d.target === "object" ? d.target.id : d.target;
+        const isHighlighted = highlightedEdges.some(
+          (he) => he.source === sourceId && he.target === targetId
+        );
+        return isHighlighted ? "#22c55e" : "#525252";
+      })
+      .attr("stroke-opacity", (d) => {
+        const sourceId = typeof d.source === "object" ? d.source.id : d.source;
+        const targetId = typeof d.target === "object" ? d.target.id : d.target;
+        const isHighlighted = highlightedEdges.some(
+          (he) => he.source === sourceId && he.target === targetId
+        );
+        return isHighlighted ? 0.9 : 0.3;
+      })
+      .attr("stroke-width", (d) => {
+        const sourceId = typeof d.source === "object" ? d.source.id : d.source;
+        const targetId = typeof d.target === "object" ? d.target.id : d.target;
+        const isHighlighted = highlightedEdges.some(
+          (he) => he.source === sourceId && he.target === targetId
+        );
+        return isHighlighted ? 3 : Math.max(1, (d.weight / maxWeight) * 3);
+      })
       .style("cursor", "pointer")
       .on("click", (event, d) => {
         event.stopPropagation();
@@ -123,13 +173,33 @@ export function GraphView({
       );
 
     node.append("circle")
-      .attr("r", (d) => 15 + Math.min(d.patternCount / 10, 10))
+      .attr("r", (d) => {
+        const baseRadius = 15 + Math.min(d.patternCount / 10, 10);
+        const isHighlighted = highlightedPathSet.has(d.id as PitchClass);
+        const isCurrent = d.id === currentlyHighlightedNode;
+        if (isCurrent) return baseRadius + 8;
+        if (isHighlighted) return baseRadius + 4;
+        return baseRadius;
+      })
       .attr("fill", (d) => {
         const hue = (d.id / 12) * 360;
+        const isHighlighted = highlightedPathSet.has(d.id as PitchClass);
+        const isCurrent = d.id === currentlyHighlightedNode;
+        if (isCurrent) return "#22c55e";
+        if (isHighlighted) return `hsl(${hue}, 70%, 60%)`;
         return `hsl(${hue}, 70%, 50%)`;
       })
-      .attr("stroke", "#fff")
-      .attr("stroke-width", 2);
+      .attr("stroke", (d) => {
+        const isCurrent = d.id === currentlyHighlightedNode;
+        return isCurrent ? "#fff" : "#fff";
+      })
+      .attr("stroke-width", (d) => {
+        const isHighlighted = highlightedPathSet.has(d.id as PitchClass);
+        const isCurrent = d.id === currentlyHighlightedNode;
+        if (isCurrent) return 4;
+        if (isHighlighted) return 3;
+        return 2;
+      });
 
     node.append("text")
       .text((d) => d.name)
@@ -140,11 +210,16 @@ export function GraphView({
       .attr("font-weight", "bold")
       .attr("pointer-events", "none");
 
-    node.on("click", (event, d) => {
-      event.stopPropagation();
+    node.on("click", (_, d) => {
       setSelectedNode(d.id);
-      onNodeClick?.(d.id);
-    });
+      onNodeClick?.(d.id as PitchClass);
+    })
+      .on("mouseenter", (_, d) => {
+        onNodeHover?.(d.id as PitchClass);
+      })
+      .on("mouseleave", () => {
+        onNodeHover?.(null);
+      });
 
     simulation.on("tick", () => {
       link
@@ -159,7 +234,56 @@ export function GraphView({
     return () => {
       simulation.stop();
     };
-  }, [nodes, links, width, height, graph, onNodeClick, onEdgeClick]);
+  }, [nodes, links, width, height, graph, onNodeClick, onEdgeClick, onNodeHover]);
+
+  useEffect(() => {
+    if (!svgRef.current) return;
+
+    const svg = d3.select(svgRef.current);
+
+    svg.selectAll<SVGCircleElement, D3Node>("circle")
+      .attr("r", (d) => {
+        const baseRadius = 15 + Math.min(d.patternCount / 10, 10);
+        const isHighlighted = highlightedPathSet.has(d.id as PitchClass);
+        const isCurrent = d.id === currentlyHighlightedNode;
+        if (isCurrent) return baseRadius + 8;
+        if (isHighlighted) return baseRadius + 4;
+        return baseRadius;
+      })
+      .attr("fill", (d) => {
+        const hue = (d.id / 12) * 360;
+        const isHighlighted = highlightedPathSet.has(d.id as PitchClass);
+        const isCurrent = d.id === currentlyHighlightedNode;
+        if (isCurrent) return "#22c55e";
+        if (isHighlighted) return `hsl(${hue}, 70%, 60%)`;
+        return `hsl(${hue}, 70%, 50%)`;
+      })
+      .attr("stroke-width", (d) => {
+        const isHighlighted = highlightedPathSet.has(d.id as PitchClass);
+        const isCurrent = d.id === currentlyHighlightedNode;
+        if (isCurrent) return 4;
+        if (isHighlighted) return 3;
+        return 2;
+      });
+
+    svg.selectAll<SVGLineElement, D3Link>("line")
+      .attr("stroke", (d) => {
+        const sourceId = typeof d.source === "object" ? d.source.id : d.source;
+        const targetId = typeof d.target === "object" ? d.target.id : d.target;
+        const isHighlighted = highlightedEdges.some(
+          (he) => he.source === sourceId && he.target === targetId
+        );
+        return isHighlighted ? "#22c55e" : "#525252";
+      })
+      .attr("stroke-opacity", (d) => {
+        const sourceId = typeof d.source === "object" ? d.source.id : d.source;
+        const targetId = typeof d.target === "object" ? d.target.id : d.target;
+        const isHighlighted = highlightedEdges.some(
+          (he) => he.source === sourceId && he.target === targetId
+        );
+        return isHighlighted ? 0.9 : 0.3;
+      });
+  }, [highlightedPathSet, highlightedEdges, currentlyHighlightedNode]);
 
   return (
     <div className="relative bg-zinc-900 rounded-lg border border-zinc-800 overflow-hidden">

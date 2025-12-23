@@ -1,18 +1,19 @@
 import { useState, useMemo, useRef, useCallback } from "react";
-import { Search, Music, LayoutGrid, GitBranch, BarChart3 } from "lucide-react";
+import { Search, Music, LayoutGrid, GitBranch, BarChart3, Trophy, Eye, EyeOff } from "lucide-react";
 import { PatternCard } from "@/components/pattern/PatternCard";
 import { PatternModal } from "@/components/pattern/PatternModal";
 import { PatternVisualization } from "@/components/pattern/PatternVisualization";
 import { TransportBar } from "@/components/transport/TransportBar";
 import { PianoKeyboard } from "@/components/piano/PianoKeyboard";
 import { GraphView } from "@/components/graph/GraphView";
+import { PracticeView } from "@/components/practice/PracticeView";
 import { usePatternStore } from "@/stores/patternStore";
 import { usePlaybackStore } from "@/stores/playbackStore";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { pitchClassesToMidi } from "@/core";
-import type { PatternCategory, SlonimskyPattern } from "@/core/types";
+import type { PatternCategory, SlonimskyPattern, PitchClass } from "@/core/types";
 
-type ViewMode = "patterns" | "graph";
+type ViewMode = "patterns" | "split" | "graph";
 
 const CATEGORIES: { value: PatternCategory | "all"; label: string }[] = [
   { value: "all", label: "All" },
@@ -24,14 +25,18 @@ const CATEGORIES: { value: PatternCategory | "all"; label: string }[] = [
 ];
 
 function App() {
-  const { catalog, selectedPattern } = usePatternStore();
-  const { currentNote, rootNote, octaves } = usePlaybackStore();
+  const { catalog, selectedPattern, getMasteredCount, isMastered } = usePatternStore();
+  const { currentNote, rootNote, octaves, practiceMode } = usePlaybackStore();
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<PatternCategory | "all">("all");
   const [viewMode, setViewMode] = useState<ViewMode>("patterns");
   const [showVisualization, setShowVisualization] = useState(false);
   const [modalPattern, setModalPattern] = useState<SlonimskyPattern | null>(null);
   const [isPianoExpanded, setIsPianoExpanded] = useState(false);
+  const [showPracticeView, setShowPracticeView] = useState(false);
+  const [selectedPitchClass, setSelectedPitchClass] = useState<PitchClass | null>(null);
+  const [hoveredPitchClass, setHoveredPitchClass] = useState<PitchClass | null>(null);
+  const [hideMatered, setHideMastered] = useState(false);
 
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -59,9 +64,11 @@ function App() {
       const matchesCategory =
         categoryFilter === "all" || pattern.category === categoryFilter;
 
-      return matchesSearch && matchesCategory;
+      const matchesMastery = !hideMatered || !isMastered(pattern.id);
+
+      return matchesSearch && matchesCategory && matchesMastery;
     });
-  }, [catalog, search, categoryFilter]);
+  }, [catalog, search, categoryFilter, hideMatered, isMastered]);
 
   const handleFocusSearch = useCallback(() => {
     searchInputRef.current?.focus();
@@ -116,6 +123,17 @@ function App() {
                   <LayoutGrid className="w-4 h-4" />
                 </button>
                 <button
+                  onClick={() => setViewMode("split")}
+                  className={`p-2 rounded-md transition-colors ${
+                    viewMode === "split"
+                      ? "bg-zinc-700 text-white"
+                      : "text-zinc-400 hover:text-zinc-200"
+                  }`}
+                  title="Split View"
+                >
+                  <GitBranch className="w-4 h-4 rotate-90" />
+                </button>
+                <button
                   onClick={() => setViewMode("graph")}
                   className={`p-2 rounded-md transition-colors ${
                     viewMode === "graph"
@@ -141,16 +159,36 @@ function App() {
               >
                 <BarChart3 className="w-4 h-4" />
               </button>
+
+              <button
+                onClick={() => setHideMastered(!hideMatered)}
+                className={`p-2 rounded-lg transition-micro ${
+                  hideMatered
+                    ? "bg-green-500/20 text-green-400"
+                    : "bg-zinc-900 text-zinc-400 hover:text-zinc-200"
+                }`}
+                title={hideMatered ? "Showing unmastered only" : "Show all patterns"}
+              >
+                {hideMatered ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-zinc-900 rounded-lg">
+                <Trophy className="w-4 h-4 text-amber-500" />
+                <span className="text-sm font-medium">
+                  <span className="text-amber-400">{getMasteredCount()}</span>
+                  <span className="text-zinc-500">/{catalog.length}</span>
+                </span>
+              </div>
             </div>
           </div>
         </div>
       </header>
 
       <div className="flex-1 flex overflow-hidden">
-        <main className={`flex-1 overflow-y-auto ${showVisualization && selectedPattern ? "mr-80" : ""}`}>
-          <div className="max-w-6xl mx-auto px-6 py-6 pb-32">
-            {viewMode === "patterns" ? (
-              <>
+        {viewMode === "split" ? (
+          <>
+            <main className="flex-1 overflow-y-auto">
+              <div className="max-w-4xl mx-auto px-6 py-6 pb-32">
                 <div className="flex items-center gap-2 mb-6 flex-wrap">
                   {CATEGORIES.map((cat) => (
                     <button
@@ -170,9 +208,20 @@ function App() {
                   </span>
                 </div>
 
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-2">
                   {filteredPatterns.map((pattern) => (
-                    <PatternCard key={pattern.id} pattern={pattern} onOpenModal={setModalPattern} />
+                    <PatternCard
+                      key={pattern.id}
+                      pattern={pattern}
+                      onOpenModal={setModalPattern}
+                      highlighted={
+                        selectedPitchClass !== null || hoveredPitchClass !== null
+                          ? pattern.pitchClasses.includes(
+                              (selectedPitchClass || hoveredPitchClass)!
+                            )
+                          : false
+                      }
+                    />
                   ))}
                 </div>
 
@@ -181,12 +230,90 @@ function App() {
                     No patterns match your search.
                   </div>
                 )}
-              </>
-            ) : (
-              <GraphView />
-            )}
-          </div>
-        </main>
+              </div>
+            </main>
+
+            <aside className="w-[500px] border-l border-zinc-800 overflow-hidden flex flex-col">
+              <div className="p-4 border-b border-zinc-800 bg-zinc-900/50">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-lg font-semibold">Melodic Graph</h2>
+                  <span className="text-xs text-zinc-500">
+                    {selectedPitchClass !== null ? (
+                      <>
+                        Filtered by pitch {selectedPitchClass}
+                        <button
+                          onClick={() => setSelectedPitchClass(null)}
+                          className="ml-2 text-amber-400 hover:text-amber-300"
+                        >
+                          Clear
+                        </button>
+                      </>
+                    ) : (
+                      <>Click node to filter</>
+                    )}
+                  </span>
+                </div>
+              </div>
+              <div className="flex-1 overflow-y-auto p-4">
+                <GraphView
+                  width={450}
+                  height={500}
+                  onNodeClick={setSelectedPitchClass}
+                  onNodeHover={setHoveredPitchClass}
+                />
+              </div>
+            </aside>
+          </>
+        ) : (
+          <main
+            className={`flex-1 overflow-y-auto ${
+              showVisualization && selectedPattern ? "mr-80" : ""
+            }`}
+          >
+            <div className="max-w-6xl mx-auto px-6 py-6 pb-32">
+              {viewMode === "patterns" ? (
+                <>
+                  <div className="flex items-center gap-2 mb-6 flex-wrap">
+                    {CATEGORIES.map((cat) => (
+                      <button
+                        key={cat.value}
+                        onClick={() => setCategoryFilter(cat.value)}
+                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                          categoryFilter === cat.value
+                            ? "bg-emerald-600 text-white"
+                            : "bg-zinc-900 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800"
+                        }`}
+                      >
+                        {cat.label}
+                      </button>
+                    ))}
+                    <span className="ml-auto text-sm text-zinc-500">
+                      {filteredPatterns.length} patterns
+                    </span>
+                  </div>
+
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {filteredPatterns.map((pattern) => (
+                      <PatternCard
+                        key={pattern.id}
+                        pattern={pattern}
+                        onOpenModal={setModalPattern}
+                      />
+                    ))}
+                  </div>
+
+                  {filteredPatterns.length === 0 && (
+                    <div className="text-center py-12 text-zinc-500">
+                      No patterns match your search.
+                    </div>
+                  )}
+                </>
+              ) : (
+                <GraphView />
+              )}
+            </div>
+          </main>
+        )}
 
         {showVisualization && selectedPattern && (
           <aside className="fixed right-0 top-[73px] bottom-[72px] w-80 bg-zinc-900/50 backdrop-blur-lg border-l border-zinc-800 overflow-y-auto z-10">
@@ -258,6 +385,10 @@ function App() {
           pattern={modalPattern}
           onClose={() => setModalPattern(null)}
         />
+      )}
+
+      {(showPracticeView || practiceMode.enabled) && selectedPattern && (
+        <PracticeView onClose={() => setShowPracticeView(false)} />
       )}
     </div>
   );
