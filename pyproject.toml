@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "slonimsky"
+version = "0.2.0"
+description = "Algorithmic reconstruction of Nicolas Slonimsky's Thesaurus of Scales and Melodic Patterns, with a practice UI."
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "Ryan Palermo" }]
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.scripts]
+slonimsky = "slonimsky.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+slonimsky = ["data/*.csv", "web/*.*", "web/vendor/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
