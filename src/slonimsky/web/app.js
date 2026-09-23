@@ -163,8 +163,10 @@
   }
 
   // -------------------------------------------------------------- routing
-  function parseHash() {
-    var parts = location.hash.replace(/^#\/?/, "").split("/").map(decodeURIComponent);
+  var currentHash = "";
+  function parseHash(hash) {
+    currentHash = hash === undefined ? location.hash : hash;
+    var parts = currentHash.replace(/^#\/?/, "").split("/").map(decodeURIComponent);
     var view = parts[0] || "thesaurus";
     if (["thesaurus", "builder", "research", "about"].indexOf(view) < 0) view = "thesaurus";
     S.view = view;
@@ -190,8 +192,16 @@
     }
   }
   function go(hash) {
-    if (location.hash === hash) render();
-    else location.hash = hash;
+    if (currentHash === hash) return render();
+    try {
+      location.hash = hash;
+    } catch (e) {
+      /* some embeds refuse hash changes */
+    }
+    if (location.hash !== hash) {
+      parseHash(hash); // navigate in memory instead
+      render();
+    }
   }
   function patternHash(id) {
     var rec = S.patterns[id];
@@ -561,7 +571,9 @@
     });
     bar.appendChild(cyc);
     bar.appendChild(h("span", { style: "flex:1" }));
-    bar.appendChild(h("button", { class: "btn small", onclick: downloadMidi }, icon("download"), "MIDI"));
+    if (!window.SLONIMSKY_NO_DOWNLOADS) {
+      bar.appendChild(h("button", { class: "btn small", onclick: downloadMidi }, icon("download"), "MIDI"));
+    }
     bar.appendChild(h("button", { class: "btn small", onclick: copyAbc }, icon("copy"), "ABC"));
     if (m.inThesaurus) {
       bar.appendChild(h("button", { class: "btn small", onclick: function () {
@@ -1003,9 +1015,8 @@
   // --------------------------------------------------------------- theme
   function applyTheme(t) {
     if (t) document.documentElement.setAttribute("data-theme", t);
-    else document.documentElement.removeAttribute("data-theme");
   }
-  applyTheme(store("theme", ""));
+  applyTheme(store("theme", "")); // only a choice made here; otherwise keep the host's theme
   document.getElementById("theme-toggle").addEventListener("click", function () {
     var cur = document.documentElement.getAttribute("data-theme");
     var dark = cur ? cur === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
@@ -1035,7 +1046,9 @@
 
   function start(catalog) {
     index(catalog);
-    window.addEventListener("hashchange", function () { parseHash(); render(); });
+    window.addEventListener("hashchange", function () {
+      if (location.hash !== currentHash) { parseHash(); render(); }
+    });
     parseHash();
     render();
   }
